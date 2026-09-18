@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 
-
+from sklearn.dummy import DummyClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import MultinomialNB
 
@@ -14,6 +14,11 @@ from sklearn.svm import SVC
 def get_models_config():
     """Définition des modèles et de leurs grilles d'hyperparamètres."""
     return {
+
+        "Zero-R (Baseline)": (
+            DummyClassifier(strategy="most_frequent"),
+            {}
+        ),
         "K-Nearest Neighbors": (
             KNeighborsClassifier(algorithm="brute"),
             {"n_neighbors": [5, 11, 21], "weights": ["uniform", "distance"]}
