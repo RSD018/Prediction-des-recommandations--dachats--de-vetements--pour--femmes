@@ -184,6 +184,13 @@ div[data-testid="stFormSubmitButton"] > button:hover {
 .review-title { font-weight: 600; color: #2D1420; margin: 4px 0; }
 .review-body { color: #5A4250; font-size: 0.92rem; font-style: italic; }
 .review-meta { color: #8A6B78; font-size: 0.8rem; margin-top: 6px; }
+.info-card { background:#FFFFFF; border:1px solid #F2C9D8; border-left:5px solid #D81B60;
+    border-radius:12px; padding:1rem 1.2rem; margin-bottom:12px; color:#2D1420; font-size:0.93rem; }
+.info-card b { color:#880E4F; }
+.badge { display:inline-block; background:#FCE4EC; color:#880E4F; border:1px solid #F4A8C0;
+    border-radius:20px; padding:3px 12px; font-size:0.78rem; margin:2px 4px 2px 0; font-weight:600; }
+.disclaimer { background:#FFF8E1; border:1px solid #F2C94C; border-radius:12px; padding:0.9rem 1.2rem;
+    color:#6B5200; font-size:0.88rem; margin-top:10px; }
 .placeholder-box { background: #FFFFFF; border: 1px solid #F2C9D8; border-radius: 16px;
     padding: 2.5rem 1.5rem; text-align: center; color: #8A6B78; }
 
@@ -207,6 +214,79 @@ section[data-testid="stSidebar"] * { color: #3B1A2A; }
     color: #FFFFFF !important; font-size: 0.75rem; display: flex; align-items: center;
     justify-content: center; margin-top: 1px; }
 .side-foot { font-size: 0.72rem; color: #880E4F !important; margin-top: 22px; opacity: 0.8; }
+
+/* ===== STYLE FÉMININ RAFFINÉ ===== */
+:root { --rose:#D81B60; --rose-soft:#F06292; --blush:#FCE4EC; --border:#F2C9D8; --ink:#2D1420; --gold:#C9A227; }
+::selection { background:#F8BBD0; color:#2D1420; }
+::-webkit-scrollbar { width:10px; } ::-webkit-scrollbar-thumb { background:#F4A8C0; border-radius:10px; }
+::-webkit-scrollbar-track { background:#FFF0F5; }
+
+.stApp { background: radial-gradient(circle at 10% 6%, #FFE3EE 0, transparent 36%),
+    radial-gradient(circle at 93% 92%, #FBD5E4 0, transparent 38%), #FFF7FA; }
+.block-container { animation: fadeUp 0.6s ease both; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+
+.navbar { background: linear-gradient(135deg, #FFFFFF 0%, #FDE7EF 100%); border:1px solid var(--border);
+    border-radius:20px; margin-top:14px; padding:26px 12px 20px 12px; box-shadow:0 10px 30px rgba(216,27,96,0.10); }
+.orn { color:var(--gold); letter-spacing:12px; font-size:0.95rem; margin-bottom:6px; }
+.brand { background: linear-gradient(90deg, #880E4F, #D81B60, #880E4F); -webkit-background-clip:text;
+    background-clip:text; -webkit-text-fill-color:transparent; font-weight:700; }
+.brand small { -webkit-text-fill-color:#C9A227; }
+.tagline { font-style:italic; }
+
+.section-title { border-bottom:none; padding-bottom:10px; position:relative;
+    background: linear-gradient(90deg, #F06292, rgba(240,98,146,0)) bottom left / 100% 2px no-repeat; }
+
+.metric-card { border-top:4px solid var(--rose-soft); transition: transform .25s ease, box-shadow .25s ease; }
+.metric-card:hover { transform:translateY(-4px); box-shadow:0 14px 28px rgba(216,27,96,0.16); }
+.metric-val { background: linear-gradient(90deg, #AD1457, #F06292); -webkit-background-clip:text;
+    background-clip:text; -webkit-text-fill-color:transparent; }
+.info-card { transition: transform .25s ease, box-shadow .25s ease; box-shadow:0 4px 14px rgba(216,27,96,0.06); }
+.info-card:hover { transform:translateY(-2px); box-shadow:0 10px 22px rgba(216,27,96,0.13); }
+
+div[data-baseweb="select"] > div, div[data-baseweb="input"], div[data-baseweb="textarea"] {
+    border-radius:12px !important; border-color:#F4A8C0 !important; background:#FFFFFF !important; }
+div[data-baseweb="select"] > div:focus-within, div[data-baseweb="input"]:focus-within,
+div[data-baseweb="textarea"]:focus-within { border-color:var(--rose) !important; box-shadow:0 0 0 3px rgba(216,27,96,0.15) !important; }
+label p, .stSelectbox label, .stNumberInput label { color:#4A1330 !important; font-weight:600 !important; }
+div[data-testid="stSlider"] [role="slider"] { background:var(--rose) !important; box-shadow:0 0 0 4px rgba(216,27,96,0.18); }
+
+div[data-testid="stForm"] { background: linear-gradient(180deg, #FFFFFF 0%, #FFF9FC 100%); border-radius:20px; }
+div[data-testid="stFormSubmitButton"] > button { border-radius:999px; text-transform:uppercase; font-size:0.85rem; }
+div[data-testid="stFormSubmitButton"] > button:active { transform:scale(0.98); }
+
+.product-chip { background: linear-gradient(90deg, #FCE4EC, #FFFFFF); box-shadow:0 2px 8px rgba(216,27,96,0.08); }
+.result-card { box-shadow:0 12px 30px rgba(0,0,0,0.07); animation: pop .5s ease both; }
+.result-yes { background: linear-gradient(135deg, #F4FAF4, #DFF0E2); }
+.result-no  { background: linear-gradient(135deg, #FEF3F3, #F8DEDE); }
+@keyframes pop { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:scale(1); } }
+.conf-fill { transition: width 1s ease; }
+.pill { box-shadow:0 3px 10px rgba(216,27,96,0.06); }
+.review-preview { background: linear-gradient(180deg, #FFFFFF, #FFF9FC); box-shadow:0 4px 14px rgba(216,27,96,0.07); }
+.placeholder-box { background: linear-gradient(180deg, #FFFFFF, #FFF3F8); border-style:dashed; }
+
+div[data-testid="stExpander"] { background:#FFFFFF; border:1px solid var(--border) !important; border-radius:16px;
+    box-shadow:0 4px 14px rgba(216,27,96,0.06); }
+div[data-testid="stDataFrame"] { border:1px solid var(--border); border-radius:16px; overflow:hidden;
+    box-shadow:0 4px 14px rgba(216,27,96,0.06); }
+div[data-testid="stAlert"] { border-radius:14px; }
+
+section[data-testid="stSidebar"] div[role="radiogroup"] { gap:6px; }
+section[data-testid="stSidebar"] div[role="radiogroup"] > label { background:rgba(255,255,255,0.75);
+    border:1px solid #F4A8C0; border-radius:14px; padding:9px 14px; margin:0; width:100%;
+    transition: all .2s ease; cursor:pointer; }
+section[data-testid="stSidebar"] div[role="radiogroup"] > label:hover { background:#FFFFFF;
+    transform:translateX(4px); box-shadow:0 4px 12px rgba(216,27,96,0.18); }
+section[data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child { display:none; }
+section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+    background: linear-gradient(90deg, #D81B60, #F06292); border-color:#D81B60;
+    box-shadow:0 6px 16px rgba(216,27,96,0.32); }
+section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) * { color:#FFFFFF !important; font-weight:600; }
+.side-card { background: rgba(255,255,255,0.85); box-shadow:0 3px 10px rgba(136,14,79,0.10); }
+
+.site-foot { text-align:center; color:#8A6B78; font-size:0.78rem; letter-spacing:3px; margin:48px 0 8px 0;
+    padding-top:16px; border-top:1px solid var(--border); }
+.site-foot span { color:var(--gold); }
 </style>
 """
 
@@ -229,10 +309,19 @@ def load_resources():
 
 model, preprocessor = load_resources()
 
+PAGES = [
+    "🏠 Accueil",
+    "🔮 Prédiction en Direct",
+    "📊 Performance des Modèles",
+    "📈 Statistiques du Dataset",
+    "💡 Découvertes Clés",
+    "ℹ️ À propos",
+]
+
 # Ticker sans mention d'IA
 ticker_items = [
     "✦ NOUVELLE COLLECTION AUTOMNE-HIVER",
-    "✦ MODÈLES DE MACHINE LEARNING CLASSIAUX",
+    "✦ MODÈLES DE MACHINE LEARNING CLASSIQUES",
     "✦ VALIDATION CROISÉE STRATIFIÉE 5-FOLD",
     "✦ SÉLECTION D'HYPERPARAMÈTRES PAR GRIDSEARCHCV",
 ]
@@ -242,7 +331,7 @@ st.markdown(
     h(f"""
     <div class="ticker"><div class="ticker-track">{ticker_html}{ticker_html}</div></div>
     <div class="navbar">
-        <div class="brand">PRÉDICTION DES RECOMMANDATIONS D'ACHATS
+        <div class="orn">✿ ✦ ✿</div><div class="brand">PRÉDICTION DES RECOMMANDATIONS D'ACHATS
             <small>VÊTEMENTS POUR FEMME</small></div>
     </div>
     <div class="tagline">Analyse des avis clients par algorithmes de Machine Learning de classification supervisée.</div>
@@ -252,6 +341,8 @@ st.markdown(
 
 # Sidebar sans mention d'IA
 with st.sidebar:
+    st.markdown('<div class="side-title" style="margin-top:0;">Navigation</div>', unsafe_allow_html=True)
+    st.radio("Navigation", PAGES, key="page", label_visibility="collapsed")
     st.markdown(
         h("""
         <div class="side-brand">Recommandations d'achats</div>
@@ -279,14 +370,48 @@ with st.sidebar:
     )
 
 # --- DEBUT DES ONGLETS (DASHBOARD) ---
-tab_predict, tab_benchmark, tab_dataset = st.tabs(
-    ["🔮 Prédiction en Direct", "📊 Performance des Modèles", "📈 Statistiques du Dataset"]
-)
+page = st.session_state["page"]
+
+# ==============================================================================
+# PAGE 1 : ACCUEIL
+# ==============================================================================
+if page == PAGES[0]:
+    st.markdown('<div class="section-title">🏠 Vue d\'ensemble du projet</div>', unsafe_allow_html=True)
+    st.markdown(
+        h("""
+        <div class="info-card"><b>Question de recherche :</b> à partir de l'avis d'une cliente (texte, note,
+        profil) et des caractéristiques de l'article, peut-on prédire si elle le <b>recommandera</b> ?</div>
+        """),
+        unsafe_allow_html=True,
+    )
+    k1, k2, k3, k4 = st.columns(4)
+    for col, val, lbl in [
+        (k1, "23 465", "Avis clients"),
+        (k2, "6", "Algorithmes comparés"),
+        (k3, "0.9550", "Meilleur F1-Score"),
+        (k4, "Linear SVC", "Modèle champion"),
+    ]:
+        with col:
+            st.markdown(f'<div class="metric-card"><div class="metric-val">{val}</div><div class="metric-lbl">{lbl}</div></div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-title" style="margin-top:2rem;">🧭 Pipeline de Data Mining</div>', unsafe_allow_html=True)
+    p1, p2, p3, p4 = st.columns(4)
+    for col, ico, ttl, txt in [
+        (p1, "🗂️", "1. Données", "Women's E-Commerce Clothing Reviews, cible binaire <i>Recommended IND</i>."),
+        (p2, "🧹", "2. Prétraitement", "TF-IDF sur le texte, One-Hot Encoding des catégories : 13 035 variables."),
+        (p3, "🤖", "3. Modélisation", "6 algorithmes, GridSearchCV, validation croisée stratifiée 5-Fold."),
+        (p4, "🚀", "4. Déploiement", "Prédiction en direct via ce tableau de bord Streamlit."),
+    ]:
+        with col:
+            st.markdown(f'<div class="info-card"><div style="font-size:1.6rem;">{ico}</div><b>{ttl}</b><br>{txt}</div>', unsafe_allow_html=True)
+
+    st.info("👈 Utilisez le menu de gauche pour naviguer : lancez une prédiction, comparez les modèles ou explorez le dataset.")
+
 
 # ==============================================================================
 # ONGLET 1 : PRÉDICTION EN DIRECT
 # ==============================================================================
-with tab_predict:
+if page == PAGES[1]:
     if model is None or preprocessor is None:
         st.error(
             "⚠️ Fichiers introuvables ! Assurez-vous d'avoir sauvegardé "
@@ -459,7 +584,7 @@ with tab_predict:
 # ==============================================================================
 # ONGLET 2 : PERFORMANCE ET COMPARATIF DES MODÈLES (Exigence Dr. Hosni)
 # ==============================================================================
-with tab_benchmark:
+if page == PAGES[2]:
     st.markdown('<div class="section-title">📊 Comparatif des Modèles Classiques</div>', unsafe_allow_html=True)
     st.markdown(
         "Évaluation comparative des algorithmes de classification supervisée entraînés sur le dataset "
@@ -532,12 +657,12 @@ with tab_benchmark:
 
     st.markdown('<div class="section-title" style="margin-top:2rem;">📈 Graphique Comparatif (F1-Score)</div>', unsafe_allow_html=True)
     chart_df = benchmark_data.set_index("Modèle")[["F1-Score", "Accuracy"]]
-    st.bar_chart(chart_df)
+    st.bar_chart(chart_df, color=["#D81B60", "#F8BBD0"])
 
 # ==============================================================================
 # ONGLET 3 : STATISTIQUES DU DATASET
 # ==============================================================================
-with tab_dataset:
+if page == PAGES[3]:
     st.markdown('<div class="section-title">📈 Exploration du Dataset (Women\'s E-Commerce Clothing Reviews)</div>', unsafe_allow_html=True)
 
     d1, d2, d3, d4 = st.columns(4)
@@ -559,7 +684,7 @@ with tab_dataset:
             "Classe": ["Recommandé (1)", "Non Recommandé (0)"],
             "Proportion (%)": [82.22, 17.78]
         }).set_index("Classe")
-        st.bar_chart(target_dist)
+        st.bar_chart(target_dist, color="#D81B60")
 
     with col_b:
         st.markdown("#### Répartition par Département")
@@ -567,4 +692,71 @@ with tab_dataset:
             "Département": ["Tops", "Dresses", "Bottoms", "Intimate", "Jackets", "Trend"],
             "Nombre d'avis": [10468, 6319, 3799, 1735, 1032, 112]
         }).set_index("Département")
-        st.bar_chart(dept_dist)
+        st.bar_chart(dept_dist, color="#F06292")
+
+# ==============================================================================
+# PAGE 5 : DÉCOUVERTES CLÉS
+# ==============================================================================
+if page == PAGES[4]:
+    st.markdown('<div class="section-title">💡 Découvertes Clés</div>', unsafe_allow_html=True)
+    findings = [
+        ("Déséquilibre des classes",
+         "Quelle est la répartition de la cible ?",
+         "82,2 % d'avis recommandés contre 17,8 % de non-recommandés.",
+         "Le baseline Zero-R atteint déjà 82,23 % d'accuracy : l'accuracy seule est trompeuse, "
+         "d'où le choix du F1-Score et du ROC-AUC."),
+        ("Champion : Linear SVC",
+         "Quel algorithme généralise le mieux ?",
+         "Linear SVC : F1 = 0.9550, ROC-AUC = 0.9650, devant Random Forest (F1 = 0.9530).",
+         "Les modèles linéaires conviennent bien aux données textuelles creuses et de grande dimension (13 035 variables)."),
+        ("Limite de l'arbre de décision",
+         "Un modèle simple suffit-il ?",
+         "Decision Tree : ROC-AUC = 0.85, le plus faible des modèles évalués.",
+         "Un arbre unique sépare mal les classes sur des données TF-IDF ; les méthodes d'ensemble ou linéaires sont préférables."),
+        ("Apport du tuning",
+         "Que gagne-t-on avec GridSearchCV ?",
+         "Tous les modèles battent nettement le baseline en F1 (0.93 à 0.955 contre 0.9025).",
+         "Le réglage des hyperparamètres avec validation croisée stratifiée stabilise les performances."),
+    ]
+    for i, (ttl, q, res, interp) in enumerate(findings, 1):
+        with st.expander(f"Découverte {i} · {ttl}", expanded=(i == 1)):
+            st.markdown(
+                h(f"""
+                <div class="info-card"><b>❓ Question :</b> {q}</div>
+                <div class="info-card"><b>📌 Résultat :</b> {res}</div>
+                <div class="info-card"><b>🧠 Interprétation :</b> {interp}</div>
+                """),
+                unsafe_allow_html=True,
+            )
+
+# ==============================================================================
+# PAGE 6 : À PROPOS
+# ==============================================================================
+if page == PAGES[5]:
+    st.markdown('<div class="section-title">ℹ️ À propos</div>', unsafe_allow_html=True)
+    st.markdown(
+        h("""
+        <div class="info-card"><b>Projet :</b> Prédiction des recommandations d'achats · Data Mining &
+        Machine Learning supervisé<br>
+        """),
+        unsafe_allow_html=True,
+    )
+    st.markdown("**Stack technique**")
+    st.markdown(
+        "".join(f'<span class="badge">{t}</span>' for t in
+                ["Python", "Streamlit", "scikit-learn", "pandas", "NumPy", "joblib", "TF-IDF", "GridSearchCV"]),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        h("""
+        <div class="disclaimer">⚠️ Application développée à des fins académiques. Les prédictions sont
+        indicatives et dépendent des données d'entraînement (avis en anglais).</div>
+        """),
+        unsafe_allow_html=True,
+    )
+
+
+st.markdown(
+    '<div class="site-foot"><span>✿</span> PRÉDICTION DES RECOMMANDATIONS D\'ACHATS · ÉCOLE MILITAIRE POLYTECHNIQUE <span>✿</span></div>',
+    unsafe_allow_html=True,
+)
