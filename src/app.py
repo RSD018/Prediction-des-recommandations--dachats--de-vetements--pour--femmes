@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-# Configuration du thème Streamlit
+
 try:
     for _k, _v in {
         "theme.base": "light",
@@ -98,7 +98,7 @@ DEPT_EMOJI = {
     "Trend": "✨",
 }
 
-# --- STYLES CSS ---
+
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Inter:wght@400;500;600&display=swap');
@@ -318,7 +318,7 @@ PAGES = [
     "ℹ️ À propos",
 ]
 
-# Ticker sans mention d'IA
+
 ticker_items = [
     "✦ NOUVELLE COLLECTION AUTOMNE-HIVER",
     "✦ MODÈLES DE MACHINE LEARNING CLASSIQUES",
@@ -339,7 +339,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Sidebar sans mention d'IA
+
 with st.sidebar:
     st.markdown('<div class="side-title" style="margin-top:0;">Navigation</div>', unsafe_allow_html=True)
     st.radio("Navigation", PAGES, key="page", label_visibility="collapsed")
@@ -369,7 +369,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-# --- DEBUT DES ONGLETS (DASHBOARD) ---
+
 page = st.session_state["page"]
 
 # ==============================================================================
@@ -603,8 +603,6 @@ if page == PAGES[2]:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Tableau de synthèse des 6 modèles
-    # Remplacer la définition de benchmark_data dans app.py :
     benchmark_data = pd.DataFrame([
     {
         "Modèle": "Linear SVC / SVM",
@@ -708,7 +706,7 @@ if page == PAGES[4]:
          "d'où le choix du F1-Score et du ROC-AUC."),
         ("Champion : Linear SVC",
          "Quel algorithme généralise le mieux ?",
-         "Linear SVC : F1 = 0.9550, ROC-AUC = 0.9650, devant Random Forest (F1 = 0.9530).",
+         "Linear SVC : F1 = 0.9622, ROC-AUC = 0.9775, devant Random Forest (F1 = 0.9613).",
          "Les modèles linéaires conviennent bien aux données textuelles creuses et de grande dimension (13 035 variables)."),
         ("Limite de l'arbre de décision",
          "Un modèle simple suffit-il ?",
