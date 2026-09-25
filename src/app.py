@@ -388,7 +388,7 @@ if page == PAGES[0]:
     for col, val, lbl in [
         (k1, "23 465", "Avis clients"),
         (k2, "6", "Algorithmes comparés"),
-        (k3, "0.9550", "Meilleur F1-Score"),
+        (k3, "0.9622", "Meilleur F1-Score"),
         (k4, "Linear SVC", "Modèle champion"),
     ]:
         with col:
@@ -604,50 +604,51 @@ if page == PAGES[2]:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Tableau de synthèse des 6 modèles
+    # Remplacer la définition de benchmark_data dans app.py :
     benchmark_data = pd.DataFrame([
-        {
-            "Modèle": "Linear SVC / SVM",
-            "Accuracy": 0.9250,
-            "F1-Score": 0.9550,
-            "ROC-AUC": 0.9650,
-            "Meilleurs Hyperparamètres": "{'C': 1.0, 'loss': 'squared_hinge'}"
-        },
-        {
-            "Modèle": "Random Forest",
-            "Accuracy": 0.9210,
-            "F1-Score": 0.9530,
-            "ROC-AUC": 0.9620,
-            "Meilleurs Hyperparamètres": "{'max_depth': None, 'n_estimators': 200}"
-        },
-        {
-            "Modèle": "K-Nearest Neighbors (k-NN)",
-            "Accuracy": 0.9186,
-            "F1-Score": 0.9519,
-            "ROC-AUC": 0.9642,
-            "Meilleurs Hyperparamètres": "{'algorithm': 'brute', 'n_neighbors': 21, 'weights': 'uniform'}"
-        },
-        {
-            "Modèle": "Multinomial Naïve Bayes",
-            "Accuracy": 0.9052,
-            "F1-Score": 0.9425,
-            "ROC-AUC": 0.9531,
-            "Meilleurs Hyperparamètres": "{'alpha': 0.1}"
-        },
-        {
-            "Modèle": "Decision Tree",
-            "Accuracy": 0.8900,
-            "F1-Score": 0.9300,
-            "ROC-AUC": 0.8500,
-            "Meilleurs Hyperparamètres": "{'criterion': 'gini', 'max_depth': 20}"
-        },
-        {
-            "Modèle": "Zero-R (Baseline)",
-            "Accuracy": 0.8223,
-            "F1-Score": 0.9025,
-            "ROC-AUC": "N/A",
-            "Meilleurs Hyperparamètres": "{'strategy': 'most_frequent'}"
-        }
-    ])
+    {
+        "Modèle": "Linear SVC / SVM",
+        "Accuracy": 0.9378,
+        "F1-Score": 0.9622,
+        "ROC-AUC": 0.9775,
+        "Meilleurs Hyperparamètres": "{'C': 0.1, 'loss': 'squared_hinge'}"
+    },
+    {
+        "Modèle": "Random Forest",
+        "Accuracy": 0.9356,
+        "F1-Score": 0.9613,
+        "ROC-AUC": 0.9730,
+        "Meilleurs Hyperparamètres": "{'max_depth': None, 'min_samples_split': 5, 'n_estimators': 200}"
+    },
+    {
+        "Modèle": "Decision Tree",
+        "Accuracy": 0.9301,
+        "F1-Score": 0.9563,
+        "ROC-AUC": 0.9684,
+        "Meilleurs Hyperparamètres": "{'criterion': 'gini', 'max_depth': 5, 'min_samples_split': 5}"
+    },
+    {
+        "Modèle": "K-Nearest Neighbors (k-NN)",
+        "Accuracy": 0.9186,
+        "F1-Score": 0.9519,
+        "ROC-AUC": 0.9642,
+        "Meilleurs Hyperparamètres": "{'algorithm': 'brute', 'n_neighbors': 21, 'weights': 'uniform'}"
+    },
+    {
+        "Modèle": "Multinomial Naïve Bayes",
+        "Accuracy": 0.9052,
+        "F1-Score": 0.9425,
+        "ROC-AUC": 0.9531,
+        "Meilleurs Hyperparamètres": "{'alpha': 0.1}"
+    },
+    {
+        "Modèle": "Zero-R (Baseline)",
+        "Accuracy": 0.8223,
+        "F1-Score": 0.9025,
+        "ROC-AUC": "N/A",
+        "Meilleurs Hyperparamètres": "{'strategy': 'most_frequent'}"
+    }
+])
 
     st.dataframe(
         benchmark_data.style.highlight_max(subset=["Accuracy", "F1-Score"], color="#F8BBD0"),
