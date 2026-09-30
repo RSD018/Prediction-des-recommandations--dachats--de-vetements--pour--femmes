@@ -315,6 +315,7 @@ PAGES = [
     "📊 Performance des Modèles",
     "📈 Statistiques du Dataset",
     "💡 Découvertes Clés",
+    "🧪 Tests d'hypothèses",
     "ℹ️ À propos",
 ]
 
@@ -729,9 +730,124 @@ if page == PAGES[4]:
             )
 
 # ==============================================================================
-# PAGE 6 : À PROPOS
+# PAGE 6 : TESTS D'HYPOTHÈSES
 # ==============================================================================
 if page == PAGES[5]:
+    ALPHA = 0.05
+
+   
+    N_REC, N_NOT_REC = 19314, 4172          
+    U_STAT, P_MW = 78344145.0, 0.0         
+    CHI2, DOF, P_CHI2 = 50.24343, 5, 1.235608e-09
+    N_CHI2 = 23472                          
+
+    rank_biserial = 2 * U_STAT / (N_REC * N_NOT_REC) - 1
+    cramers_v = float(np.sqrt(CHI2 / (N_CHI2 * (2 - 1))))   
+
+    HYPOTHESES = [
+        {
+            "id": "H1", "test": "Mann-Whitney U Test",
+            "vars": "Rating vs Recommended IND",
+            "stat": U_STAT, "p": P_MW,
+            "effect": f"Rank-Biserial r = {rank_biserial:.4f}",
+            "h0": "Les distributions de Rating sont similaires chez les clientes qui recommandent et celles qui ne recommandent pas.",
+            "note": f"Médiane du Rating : 5 (recommandé, n = {N_REC:,}) contre 2 (non recommandé, n = {N_NOT_REC:,}).".replace(",", " "),
+        },
+        {
+            "id": "H2", "test": "Chi-Square Test of Independence",
+            "vars": "Department Name vs Recommended IND",
+            "stat": CHI2, "p": P_CHI2,
+            "effect": f"Cramér's V = {cramers_v:.4f}",
+            "h0": "Department Name et Recommended IND sont indépendantes.",
+            "note": f"{DOF} degrés de liberté. Association significative mais très faible (V < 0.1) : le département explique peu la recommandation.",
+        },
+    ]
+
+    def bh_adjust(pvals):
+        """Correction FDR de Benjamini-Hochberg."""
+        p = np.asarray(pvals, dtype=float)
+        m = len(p)
+        order = np.argsort(p)
+        ranked = p[order] * m / np.arange(1, m + 1)
+        ranked = np.minimum.accumulate(ranked[::-1])[::-1]
+        out = np.empty(m)
+        out[order] = np.clip(ranked, 0, 1)
+        return out
+
+    def fmt_p(p):
+        return "< 0.0001" if p < 1e-4 else f"{p:.4f}"
+
+    fdr = bh_adjust([x["p"] for x in HYPOTHESES])
+
+    st.markdown('<div class="section-title">🧪 Tests d\'hypothèses statistiques</div>', unsafe_allow_html=True)
+    st.markdown(
+        "Tests réalisés lors de l'analyse exploratoire (notebook `01_eda_and_cleaning`) sur la relation "
+        "entre les variables du dataset et la recommandation (`Recommended IND`)."
+    )
+
+    st.markdown(
+        h("""
+        <style>
+        .hyp-wrap { overflow-x:auto; border:1px solid #F2C9D8; border-radius:16px; background:#FFFFFF;
+            box-shadow:0 4px 14px rgba(216,27,96,0.06); margin:10px 0 18px 0; }
+        table.hyp { width:100%; border-collapse:collapse; font-size:0.9rem; color:#2D1420; }
+        table.hyp th { background:#FCE4EC; color:#880E4F; text-align:left; padding:12px 14px;
+            font-weight:600; border-bottom:2px solid #F06292; white-space:nowrap; }
+        table.hyp td { padding:12px 14px; border-bottom:1px solid #F8DCE7; vertical-align:top; }
+        table.hyp tr:last-child td { border-bottom:none; }
+        table.hyp td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        table.hyp .sub { display:block; font-size:0.76rem; color:#8A6B78; margin-top:2px; }
+        .dec-rej { display:inline-block; background:#FCE4EC; color:#AD1457; border:1px solid #F4A8C0;
+            border-radius:20px; padding:2px 12px; font-weight:600; font-size:0.8rem; white-space:nowrap; }
+        .dec-keep { display:inline-block; background:#EEF6EE; color:#1F5A2B; border:1px solid #8FBF8F;
+            border-radius:20px; padding:2px 12px; font-weight:600; font-size:0.8rem; white-space:nowrap; }
+        </style>
+        """),
+        unsafe_allow_html=True,
+    )
+
+    rows_html = ""
+    for hyp, p_adj in zip(HYPOTHESES, fdr):
+        reject = p_adj < ALPHA
+        dec = ('<span class="dec-rej">Reject H0</span>' if reject
+               else '<span class="dec-keep">Fail to Reject H0</span>')
+        rows_html += (
+            f'<tr><td><b>{hyp["id"]}</b></td>'
+            f'<td>{hyp["test"]}<span class="sub">{esc(hyp["vars"])}</span></td>'
+            f'<td class="num">{hyp["stat"]:,.4f}</td>'
+            f'<td class="num">{fmt_p(hyp["p"])}</td>'
+            f'<td class="num">{fmt_p(p_adj)}</td>'
+            f'<td>{hyp["effect"]}</td>'
+            f'<td>{dec}</td></tr>'
+        )
+
+    st.markdown(f'<div class="section-title" style="font-size:1.1rem;">Summary Table of Statistical Hypotheses (α = {ALPHA})</div>', unsafe_allow_html=True)
+    st.markdown(
+        h(f"""
+        <div class="hyp-wrap"><table class="hyp">
+        <thead><tr><th>ID</th><th>Test</th><th>Statistic</th><th>Raw p-value</th>
+        <th>FDR p-value</th><th>Effect Size</th><th>Decision</th></tr></thead>
+        <tbody>{rows_html}</tbody></table></div>
+        """),
+        unsafe_allow_html=True,
+    )
+   
+
+    st.markdown('<div class="section-title" style="margin-top:1.5rem;">📝 Hypothèses et interprétation</div>', unsafe_allow_html=True)
+    for hyp in HYPOTHESES:
+        st.markdown(
+            h(f"""
+            <div class="info-card"><b>{hyp["id"]} · {esc(hyp["vars"])}</b><br>
+            <b>H0 :</b> {esc(hyp["h0"])}<br>
+            <b>🧠 Lecture :</b> {esc(hyp["note"])}</div>
+            """),
+            unsafe_allow_html=True,
+        )
+
+# ==============================================================================
+# PAGE 7 : À PROPOS
+# ==============================================================================
+if page == PAGES[6]:
     st.markdown('<div class="section-title">ℹ️ À propos</div>', unsafe_allow_html=True)
     st.markdown(
         h("""
