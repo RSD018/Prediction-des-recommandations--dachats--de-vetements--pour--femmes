@@ -111,7 +111,6 @@ Prediction-des-recommandations-dachat/
 - **Tests statistiques** :
   - Mann-Whitney U (`Rating` vs `Recommended IND`)
   - Chi² d'indépendance (`Department Name` vs `Recommended IND`)
-  - Les résultats sont repris dans l'onglet **🧪 Tests d'hypothèses** de l'application
 - Nettoyage : suppression des doublons, espaces, chaînes vides → `Unknown`, gestion des valeurs textuelles/catégorielles manquantes, suppression des lignes à cible manquante
 - Sauvegarde → `data/processed/reviews_clean.csv`
 
