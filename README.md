@@ -111,6 +111,7 @@ Prediction-des-recommandations-dachat/
 - **Tests statistiques** :
   - Mann-Whitney U (`Rating` vs `Recommended IND`)
   - Chi² d'indépendance (`Department Name` vs `Recommended IND`)
+  - Les résultats sont repris dans l'onglet **🧪 Tests d'hypothèses** de l'application
 - Nettoyage : suppression des doublons, espaces, chaînes vides → `Unknown`, gestion des valeurs textuelles/catégorielles manquantes, suppression des lignes à cible manquante
 - Sauvegarde → `data/processed/reviews_clean.csv`
 
@@ -150,7 +151,8 @@ Interface interactive avec plusieurs onglets :
 3. **📊 Performance des Modèles** — tableau comparatif + graphique F1-Score
 4. **📈 Statistiques du Dataset** — répartition de la cible, répartition par département
 5. **💡 Découvertes Clés** — synthèse des insights (déséquilibre des classes, modèle champion, limites de l'arbre de décision, apport du tuning)
-6. **ℹ️ À propos** — stack technique et disclaimer académique
+6. **🧪 Tests d'hypothèses** — tableau récapitulatif des tests statistiques du notebook 01 (α = 0,05) : H1 Mann-Whitney U (`Rating` vs `Recommended IND`) et H2 Chi² d'indépendance (`Department Name` vs `Recommended IND`), avec statistique, p-value brute, p-value ajustée (FDR Benjamini-Hochberg), taille d'effet (r de rang bisérial, V de Cramér) et décision
+7. **ℹ️ À propos** — stack technique et disclaimer académique
 
 ### Lancer l'application
 
