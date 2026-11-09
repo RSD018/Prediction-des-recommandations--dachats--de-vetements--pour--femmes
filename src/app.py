@@ -584,81 +584,179 @@ if page == PAGES[1]:
                     st.error(f"Erreur lors de l'exécution du modèle : {e}")
 
 # ==============================================================================
-# ONGLET 2 : PERFORMANCE ET COMPARATIF DES MODÈLES (Exigence Dr. Hosni)
+# ONGLET 2 : PERFORMANCE ET COMPARATIF DES MODÈLES
 # ==============================================================================
 if page == PAGES[2]:
     st.markdown('<div class="section-title">📊 Comparatif des Modèles Classiques</div>', unsafe_allow_html=True)
     st.markdown(
-        "Évaluation comparative des algorithmes de classification supervisée entraînés sur le dataset "
-        "avec **GridSearchCV (Stratified 5-Fold CV)** et scoring optimisé sur le **F1-Score**."
+        "Comparaison des modèles à partir des métriques réellement exportées "
+        "par le notebook `03_classification_models.ipynb`."
     )
 
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.markdown('<div class="metric-card"><div class="metric-val">6</div><div class="metric-lbl">Modèles Évalués</div></div>', unsafe_allow_html=True)
-    with m2:
-        st.markdown('<div class="metric-card"><div class="metric-val">0.9550</div><div class="metric-lbl">Meilleur F1-Score</div></div>', unsafe_allow_html=True)
-    with m3:
-        st.markdown('<div class="metric-card"><div class="metric-val">0.9650</div><div class="metric-lbl">Meilleur ROC-AUC</div></div>', unsafe_allow_html=True)
-    with m4:
-        st.markdown('<div class="metric-card"><div class="metric-val">Linear SVC</div><div class="metric-lbl">Modèle Champion</div></div>', unsafe_allow_html=True)
+    # Recherche du CSV dans le dossier notebooks du projet.
+    metrics_path = PROJECT_ROOT / "notebooks" / "evaluation_metrics.csv"
+    if not metrics_path.exists():
+        metrics_path = Path(__file__).resolve().parent / "notebooks" / "evaluation_metrics.csv"
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    if not metrics_path.exists():
+        st.error(
+            "Le fichier `notebooks/evaluation_metrics.csv` est introuvable. "
+            "Exécutez le notebook 03 et vérifiez que le CSV est bien présent."
+        )
+        st.stop()
 
-    benchmark_data = pd.DataFrame([
-    {
-        "Modèle": "Linear SVC / SVM",
-        "Accuracy": 0.9378,
-        "F1-Score": 0.9622,
-        "ROC-AUC": 0.9775,
-        "Meilleurs Hyperparamètres": "{'C': 0.1, 'loss': 'squared_hinge'}"
-    },
-    {
-        "Modèle": "Random Forest",
-        "Accuracy": 0.9356,
-        "F1-Score": 0.9613,
-        "ROC-AUC": 0.9730,
-        "Meilleurs Hyperparamètres": "{'max_depth': None, 'min_samples_split': 5, 'n_estimators': 200}"
-    },
-    {
-        "Modèle": "Decision Tree",
-        "Accuracy": 0.9301,
-        "F1-Score": 0.9563,
-        "ROC-AUC": 0.9684,
-        "Meilleurs Hyperparamètres": "{'criterion': 'gini', 'max_depth': 5, 'min_samples_split': 5}"
-    },
-    {
-        "Modèle": "K-Nearest Neighbors (k-NN)",
-        "Accuracy": 0.9186,
-        "F1-Score": 0.9519,
-        "ROC-AUC": 0.9642,
-        "Meilleurs Hyperparamètres": "{'algorithm': 'brute', 'n_neighbors': 21, 'weights': 'uniform'}"
-    },
-    {
-        "Modèle": "Multinomial Naïve Bayes",
-        "Accuracy": 0.9052,
-        "F1-Score": 0.9425,
-        "ROC-AUC": 0.9531,
-        "Meilleurs Hyperparamètres": "{'alpha': 0.1}"
-    },
-    {
-        "Modèle": "Zero-R (Baseline)",
-        "Accuracy": 0.8223,
-        "F1-Score": 0.9025,
-        "ROC-AUC": "N/A",
-        "Meilleurs Hyperparamètres": "{'strategy': 'most_frequent'}"
+    try:
+        benchmark_data = pd.read_csv(metrics_path)
+    except Exception as e:
+        st.error(f"Impossible de lire evaluation_metrics.csv : {e}")
+        st.stop()
+
+    if benchmark_data.empty:
+        st.warning("Le fichier evaluation_metrics.csv ne contient aucune ligne.")
+        st.stop()
+
+    # Harmonisation des noms de colonnes pour accepter les variantes du CSV.
+    def _normalize_metric_name(name):
+        return re.sub(r"[^a-z0-9]", "", str(name).lower())
+
+    normalized_columns = {
+        _normalize_metric_name(col): col for col in benchmark_data.columns
     }
-])
 
+    def _find_metric_column(candidates):
+        for candidate in candidates:
+            key = _normalize_metric_name(candidate)
+            if key in normalized_columns:
+                return normalized_columns[key]
+        return None
+
+    model_col = _find_metric_column(["Modèle", "Model", "Classifier", "Estimator", "Algorithm"])
+    if model_col is None:
+        # Certains exports CSV enregistrent le nom du modèle dans la première colonne.
+        model_col = benchmark_data.columns[0]
+    if model_col != "Modèle":
+        benchmark_data = benchmark_data.rename(columns={model_col: "Modèle"})
+
+    metric_aliases = {
+        "Accuracy": ["Accuracy", "Acc"],
+        "F1-macro": ["F1-macro", "F1_macro", "Macro F1", "F1 Macro", "Macro-F1"],
+        "F1-weighted": ["F1-weighted", "F1_weighted", "Weighted F1", "F1 Weighted"],
+        "Balanced Accuracy": ["Balanced Accuracy", "Balanced_Accuracy", "Balanced-Accuracy"],
+        "ROC-AUC": ["ROC-AUC", "ROC_AUC", "ROC AUC", "AUC"],
+        "Precision": ["Precision", "Precision weighted"],
+        "Recall": ["Recall", "Recall weighted"],
+        "F1-Score": ["F1-Score", "F1 Score", "F1", "F1-score"],
+    }
+
+    available_metrics = {}
+    for display_name, aliases in metric_aliases.items():
+        column = _find_metric_column(aliases)
+        if column is not None and column != "Modèle":
+            available_metrics[display_name] = column
+
+    # Convertit les métriques en valeurs numériques pour les tableaux et graphiques.
+    for display_name, source_column in available_metrics.items():
+        benchmark_data[display_name] = pd.to_numeric(
+            benchmark_data[source_column], errors="coerce"
+        )
+
+    preferred_metrics = [
+        "Accuracy", "Precision", "Recall", "F1-Score", "F1-macro",
+        "F1-weighted", "Balanced Accuracy", "ROC-AUC"
+    ]
+    display_metrics = [m for m in preferred_metrics if m in available_metrics]
+
+    if not display_metrics:
+        st.error(
+            "Aucune colonne de métrique reconnue dans le CSV. "
+            f"Colonnes trouvées : {', '.join(map(str, benchmark_data.columns))}"
+        )
+        st.stop()
+
+    # Cartes calculées à partir des résultats du CSV, jamais à partir de valeurs fixes.
+    primary_metric = "F1-macro" if "F1-macro" in display_metrics else (
+        "F1-Score" if "F1-Score" in display_metrics else display_metrics[0]
+    )
+    best_row = benchmark_data.loc[benchmark_data[primary_metric].idxmax()]
+    best_model_name = str(best_row["Modèle"])
+    best_primary_value = best_row[primary_metric]
+
+    metric_cards = st.columns(4)
+    with metric_cards[0]:
+        st.markdown(
+            f'<div class="metric-card"><div class="metric-val">{len(benchmark_data)}</div>'
+            '<div class="metric-lbl">Modèles évalués</div></div>',
+            unsafe_allow_html=True
+        )
+    with metric_cards[1]:
+        st.markdown(
+            f'<div class="metric-card"><div class="metric-val">{best_primary_value:.4f}</div>'
+            f'<div class="metric-lbl">Meilleur {primary_metric}</div></div>',
+            unsafe_allow_html=True
+        )
+    with metric_cards[2]:
+        if "ROC-AUC" in display_metrics and benchmark_data["ROC-AUC"].notna().any():
+            best_auc = benchmark_data["ROC-AUC"].max()
+            auc_value = f"{best_auc:.4f}"
+        else:
+            auc_value = "N/D"
+        st.markdown(
+            f'<div class="metric-card"><div class="metric-val">{auc_value}</div>'
+            '<div class="metric-lbl">Meilleur ROC-AUC</div></div>',
+            unsafe_allow_html=True
+        )
+    with metric_cards[3]:
+        st.markdown(
+            f'<div class="metric-card"><div class="metric-val" style="font-size:1.25rem;">{best_model_name}</div>'
+            f'<div class="metric-lbl">Meilleur modèle ({primary_metric})</div></div>',
+            unsafe_allow_html=True
+        )
+
+    st.caption(f"Source : {metrics_path.name} · Critère de classement principal : {primary_metric}")
+
+    # Tableau comparatif : conserve aussi les éventuelles colonnes d'hyperparamètres.
+    columns_to_show = ["Modèle"] + display_metrics
+    extra_columns = [
+        col for col in benchmark_data.columns
+        if any(term in _normalize_metric_name(col) for term in ["param", "hyper"])
+        and col not in columns_to_show
+    ]
+    columns_to_show += extra_columns
+    table_data = benchmark_data[columns_to_show].copy()
+
+    st.markdown("### Tableau comparatif des performances")
     st.dataframe(
-        benchmark_data.style.highlight_max(subset=["Accuracy", "F1-Score"], color="#F8BBD0"),
+        table_data.style.format(
+            {col: "{:.4f}" for col in display_metrics},
+            na_rep="N/A"
+        ).highlight_max(
+            subset=[col for col in display_metrics if table_data[col].notna().any()],
+            color="#F8BBD0"
+        ),
         use_container_width=True,
         hide_index=True
     )
 
-    st.markdown('<div class="section-title" style="margin-top:2rem;">📈 Graphique Comparatif (F1-Score)</div>', unsafe_allow_html=True)
-    chart_df = benchmark_data.set_index("Modèle")[["F1-Score", "Accuracy"]]
-    st.bar_chart(chart_df, color=["#D81B60", "#F8BBD0"])
+    # Comparaison graphique des métriques réellement disponibles.
+    chart_metrics = [
+        metric for metric in ["F1-macro", "Balanced Accuracy", "ROC-AUC", "Accuracy"]
+        if metric in display_metrics and benchmark_data[metric].notna().any()
+    ]
+
+    if chart_metrics:
+        st.markdown(
+            '<div class="section-title" style="margin-top:2rem;">📈 Comparaison visuelle des modèles</div>',
+            unsafe_allow_html=True
+        )
+        chart_df = benchmark_data.set_index("Modèle")[chart_metrics]
+        st.bar_chart(chart_df, use_container_width=True)
+
+    st.info(
+        f"Lecture : le modèle mis en avant est **{best_model_name}**, "
+        f"car il obtient le meilleur {primary_metric} ({best_primary_value:.4f}). "
+        "Le F1-macro et la Balanced Accuracy sont particulièrement utiles lorsque "
+        "les classes sont déséquilibrées."
+    )
 
 # ==============================================================================
 # ONGLET 3 : STATISTIQUES DU DATASET
