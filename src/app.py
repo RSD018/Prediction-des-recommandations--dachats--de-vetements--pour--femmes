@@ -1,4 +1,5 @@
 import html as _html
+import re
 from pathlib import Path
 import joblib
 import numpy as np
@@ -324,7 +325,7 @@ PAGES = [
 ticker_items = [
     "✦ NOUVELLE COLLECTION AUTOMNE-HIVER",
     "✦ MODÈLES DE MACHINE LEARNING CLASSIQUES",
-    "✦ VALIDATION CROISÉE STRATIFIÉE 5-FOLD",
+    "✦ VALIDATION CROISÉE STRATIFIÉE 6-FOLD",
     "✦ SÉLECTION D'HYPERPARAMÈTRES PAR GRIDSEARCHCV",
 ]
 ticker_html = "".join(f"<span>{t}</span>" for t in ticker_items)
@@ -401,7 +402,7 @@ if page == PAGES[0]:
     for col, ico, ttl, txt in [
         (p1, "🗂️", "1. Données", "Women's E-Commerce Clothing Reviews, cible binaire <i>Recommended IND</i>."),
         (p2, "🧹", "2. Prétraitement", "TF-IDF sur le texte, One-Hot Encoding des catégories : 13 035 variables."),
-        (p3, "🤖", "3. Modélisation", "6 algorithmes, GridSearchCV, validation croisée stratifiée 5-Fold."),
+        (p3, "🤖", "3. Modélisation", "6 algorithmes, GridSearchCV, validation croisée stratifiée 6-Fold."),
         (p4, "🚀", "4. Déploiement", "Prédiction en direct via ce tableau de bord Streamlit."),
     ]:
         with col:
@@ -805,16 +806,16 @@ if page == PAGES[4]:
          "Le baseline Zero-R atteint déjà 82,23 % d'accuracy : l'accuracy seule est trompeuse, "
          "d'où le choix du F1-Score et du ROC-AUC."),
         ("Champion : Linear SVC",
-         "Quel algorithme généralise le mieux ?",
-         "Linear SVC : F1 = 0.9622, ROC-AUC = 0.9775, devant Random Forest (F1 = 0.9613).",
+         "Quel algorithme obtient le meilleur F1-Score sur le jeu de test ?",
+         "Linear SVC : F1 = 0.9622, devant Random Forest (F1 = 0.9604). Multinomial Naïve Bayes obtient le ROC-AUC le plus élevé (0.9784).",
          "Les modèles linéaires conviennent bien aux données textuelles creuses et de grande dimension (13 035 variables)."),
         ("Limite de l'arbre de décision",
          "Un modèle simple suffit-il ?",
-         "Decision Tree : ROC-AUC = 0.85, le plus faible des modèles évalués.",
+         "Decision Tree : ROC-AUC = 0.9684. Parmi les modèles disposant d'un ROC-AUC calculé, il présente la valeur la plus faible dans les résultats exportés.",
          "Un arbre unique sépare mal les classes sur des données TF-IDF ; les méthodes d'ensemble ou linéaires sont préférables."),
         ("Apport du tuning",
          "Que gagne-t-on avec GridSearchCV ?",
-         "Tous les modèles battent nettement le baseline en F1 (0.93 à 0.955 contre 0.9025).",
+         "Les cinq modèles entraînés dépassent le baseline Zero-R en F1-Score (de 0.9425 à 0.9622, contre 0.9025 pour Zero-R).",
          "Le réglage des hyperparamètres avec validation croisée stratifiée stabilise les performances."),
     ]
     for i, (ttl, q, res, interp) in enumerate(findings, 1):
