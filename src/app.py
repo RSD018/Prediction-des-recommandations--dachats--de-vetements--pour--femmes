@@ -317,6 +317,7 @@ PAGES = [
     "💡 Découvertes Clés",
     "🧪 Tests d'hypothèses",
     "ℹ️ À propos",
+    "🔍 Analyse des erreurs",
 ]
 
 
@@ -875,3 +876,90 @@ st.markdown(
     '<div class="site-foot"><span>✿</span> PRÉDICTION DES RECOMMANDATIONS D\'ACHATS · ÉCOLE MILITAIRE POLYTECHNIQUE <span>✿</span></div>',
     unsafe_allow_html=True,
 )
+# ==============================================================================
+# PAGE : ANALYSE DES ERREURS - LINEAR SVC
+# ==============================================================================
+
+if page == PAGES[7]:
+
+    st.markdown(
+        '<div class="section-title">🔍 Analyse des erreurs — Linear SVC</div>',
+        unsafe_allow_html=True
+    )
+
+    # Load real confusion matrix exported from notebook
+    cm_path = MODELS_DIR / "linear_svc_confusion_matrix.csv"
+
+    if not cm_path.exists():
+        st.error(
+            "Matrice de confusion introuvable. "
+            "Exécutez d'abord le notebook 03."
+        )
+
+    else:
+        cm_df = pd.read_csv(cm_path, index_col=0)
+        cm = cm_df.values
+
+        tn, fp = cm[0]
+        fn, tp = cm[1]
+
+        # Calculate error rates
+        fp_rate = fp / (tn + fp)
+        fn_rate = fn / (tp + fn)
+
+        # Main metrics
+        c1, c2, c3, c4 = st.columns(4)
+
+        c1.metric("True Negatives", f"{tn:,}")
+        c2.metric("False Positives", f"{fp:,}")
+        c3.metric("False Negatives", f"{fn:,}")
+        c4.metric("True Positives", f"{tp:,}")
+
+        st.markdown("### Matrice de confusion")
+
+        st.dataframe(
+            cm_df.style.background_gradient(cmap="RdPu"),
+            use_container_width=True
+        )
+
+        st.markdown("### Comparaison des erreurs")
+
+        error_df = pd.DataFrame({
+            "Type d'erreur": ["False Positives", "False Negatives"],
+            "Nombre": [fp, fn]
+        }).set_index("Type d'erreur")
+
+        st.bar_chart(error_df)
+
+        st.markdown("### Taux d'erreur par classe")
+
+        col1, col2 = st.columns(2)
+
+        col1.metric(
+            "False Positive Rate",
+            f"{fp_rate:.2%}"
+        )
+
+        col2.metric(
+            "False Negative Rate",
+            f"{fn_rate:.2%}"
+        )
+
+        st.markdown("### Interprétation des résultats")
+
+        st.info(
+            f"Le modèle a correctement identifié {tn:,} avis non recommandés "
+            f"et {tp:,} avis recommandés."
+        )
+
+        st.warning(
+            f"Il a classé à tort {fp:,} avis non recommandés comme recommandés "
+            f"(False Positives), et {fn:,} avis recommandés comme non recommandés "
+            f"(False Negatives)."
+        )
+
+        st.markdown(
+            "**Conclusion :** Linear SVC présente des erreurs dans les deux classes. "
+            "Les taux d'erreur permettent d'évaluer séparément sa capacité "
+            "à identifier les avis non recommandés et recommandés."
+        )
