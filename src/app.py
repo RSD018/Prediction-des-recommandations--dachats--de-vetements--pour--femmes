@@ -323,7 +323,7 @@ PAGES = [
 ticker_items = [
     "✦ NOUVELLE COLLECTION AUTOMNE-HIVER",
     "✦ MODÈLES DE MACHINE LEARNING CLASSIQUES",
-    "✦ VALIDATION CROISÉE STRATIFIÉE 5-FOLD",
+    "✦ VALIDATION CROISÉE STRATIFIÉE 6-FOLD",
     "✦ SÉLECTION D'HYPERPARAMÈTRES PAR GRIDSEARCHCV",
 ]
 ticker_html = "".join(f"<span>{t}</span>" for t in ticker_items)
@@ -400,7 +400,7 @@ if page == PAGES[0]:
     for col, ico, ttl, txt in [
         (p1, "🗂️", "1. Données", "Women's E-Commerce Clothing Reviews, cible binaire <i>Recommended IND</i>."),
         (p2, "🧹", "2. Prétraitement", "TF-IDF sur le texte, One-Hot Encoding des catégories : 13 035 variables."),
-        (p3, "🤖", "3. Modélisation", "6 algorithmes, GridSearchCV, validation croisée stratifiée 5-Fold."),
+        (p3, "🤖", "3. Modélisation", "6 algorithmes, GridSearchCV, validation croisée stratifiée 6-Fold."),
         (p4, "🚀", "4. Déploiement", "Prédiction en direct via ce tableau de bord Streamlit."),
     ]:
         with col:
@@ -589,16 +589,16 @@ if page == PAGES[2]:
     st.markdown('<div class="section-title">📊 Comparatif des Modèles Classiques</div>', unsafe_allow_html=True)
     st.markdown(
         "Évaluation comparative des algorithmes de classification supervisée entraînés sur le dataset "
-        "avec **GridSearchCV (Stratified 5-Fold CV)** et scoring optimisé sur le **F1-Score**."
+        "avec **GridSearchCV (Stratified 6-Fold CV)** et scoring optimisé sur le **F1-Score**."
     )
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
         st.markdown('<div class="metric-card"><div class="metric-val">6</div><div class="metric-lbl">Modèles Évalués</div></div>', unsafe_allow_html=True)
     with m2:
-        st.markdown('<div class="metric-card"><div class="metric-val">0.9550</div><div class="metric-lbl">Meilleur F1-Score</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><div class="metric-val">0.9622</div><div class="metric-lbl">Meilleur F1-Score</div></div>', unsafe_allow_html=True)
     with m3:
-        st.markdown('<div class="metric-card"><div class="metric-val">0.9650</div><div class="metric-lbl">Meilleur ROC-AUC</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><div class="metric-val">0.9775</div><div class="metric-lbl">Meilleur ROC-AUC</div></div>', unsafe_allow_html=True)
     with m4:
         st.markdown('<div class="metric-card"><div class="metric-val">Linear SVC</div><div class="metric-lbl">Modèle Champion</div></div>', unsafe_allow_html=True)
 
@@ -614,10 +614,10 @@ if page == PAGES[2]:
     },
     {
         "Modèle": "Random Forest",
-        "Accuracy": 0.9356,
-        "F1-Score": 0.9613,
-        "ROC-AUC": 0.9730,
-        "Meilleurs Hyperparamètres": "{'max_depth': None, 'min_samples_split': 5, 'n_estimators': 200}"
+        "Accuracy": 0.9342,
+        "F1-Score": 0.9604,
+        "ROC-AUC": 0.9723,
+        "Meilleurs Hyperparamètres": "{'max_depth': None, 'min_samples_split': 2, 'n_estimators': 200}"
     },
     {
         "Modèle": "Decision Tree",
@@ -707,15 +707,15 @@ if page == PAGES[4]:
          "d'où le choix du F1-Score et du ROC-AUC."),
         ("Champion : Linear SVC",
          "Quel algorithme généralise le mieux ?",
-         "Linear SVC : F1 = 0.9622, ROC-AUC = 0.9775, devant Random Forest (F1 = 0.9613).",
+         "Linear SVC : F1 = 0.9622, ROC-AUC = 0.9775, devant Random Forest (F1 = 0.9604).",
          "Les modèles linéaires conviennent bien aux données textuelles creuses et de grande dimension (13 035 variables)."),
         ("Limite de l'arbre de décision",
          "Un modèle simple suffit-il ?",
-         "Decision Tree : ROC-AUC = 0.85, le plus faible des modèles évalués.",
-         "Un arbre unique sépare mal les classes sur des données TF-IDF ; les méthodes d'ensemble ou linéaires sont préférables."),
+         "Decision Tree (profondeur max 5) : F1 = 0.9563 et ROC-AUC = 0.9684, en retrait par rapport à Linear SVC (0.9622 et 0.9775).",
+         "Un arbre unique et peu profond sépare moins bien les classes sur des données TF-IDF de grande dimension. Il détecte en revanche bien la classe minoritaire (rappel 0.93) au prix d'une précision plus faible (0.74) : c'est ce qui motive l'étude des méthodes d'ensemble."),
         ("Apport du tuning",
          "Que gagne-t-on avec GridSearchCV ?",
-         "Tous les modèles battent nettement le baseline en F1 (0.93 à 0.955 contre 0.9025).",
+         "Tous les modèles battent nettement le baseline en F1 (0.9425 à 0.9622 contre 0.9025).",
          "Le réglage des hyperparamètres avec validation croisée stratifiée stabilise les performances."),
     ]
     for i, (ttl, q, res, interp) in enumerate(findings, 1):
