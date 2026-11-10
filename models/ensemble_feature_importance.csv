@@ -1,0 +1,41 @@
+Model,Block,Feature,Importance
+XGBoost,numérique,numérique : Rating,0.274038
+XGBoost,avis,avis : order,0.00812
+XGBoost,titre,titre : cut,0.007486
+XGBoost,avis,avis : disappointed,0.006994
+XGBoost,avis,avis : sad,0.006781
+XGBoost,avis,avis : returned,0.006478
+XGBoost,avis,avis : did,0.006279
+XGBoost,avis,avis : couldn,0.006096
+XGBoost,avis,avis : petite,0.005858
+XGBoost,titre,titre : cute,0.005692
+XGBoost,avis,avis : don,0.005572
+XGBoost,avis,avis : worn,0.005509
+XGBoost,avis,avis : looked,0.00534
+XGBoost,avis,avis : returning,0.00523
+XGBoost,avis,avis : maybe,0.005111
+XGBoost,titre,titre : runs,0.005064
+XGBoost,avis,avis : medium,0.005062
+XGBoost,avis,avis : true size,0.005024
+XGBoost,avis,avis : feminine,0.004989
+XGBoost,avis,avis : sadly,0.004973
+AdaBoost,numérique,numérique : Rating,0.295028
+AdaBoost,avis,avis : wash,0.024383
+AdaBoost,titre,titre : unflattering,0.01928
+AdaBoost,avis,avis : comfortable wearing,0.016229
+AdaBoost,titre,titre : does,0.015377
+AdaBoost,avis,avis : choice,0.015281
+AdaBoost,avis,avis : ankles,0.014922
+AdaBoost,avis,avis : appear,0.014771
+AdaBoost,avis,avis : didn realize,0.014344
+AdaBoost,avis,avis : dressed,0.01358
+AdaBoost,avis,avis : little,0.012297
+AdaBoost,avis,avis : couldn,0.012188
+AdaBoost,avis,avis : like,0.011045
+AdaBoost,avis,avis : love,0.01091
+AdaBoost,avis,avis : 130,0.01073
+AdaBoost,avis,avis : high,0.01004
+AdaBoost,avis,avis : happened,0.010014
+AdaBoost,avis,avis : unique,0.009548
+AdaBoost,avis,avis : shocked,0.009287
+AdaBoost,avis,avis : jeans,0.00917
