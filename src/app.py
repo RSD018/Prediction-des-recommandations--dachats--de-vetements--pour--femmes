@@ -5,6 +5,8 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+import altair as alt
+from sklearn.metrics import precision_recall_curve, roc_auc_score, roc_curve
 
 
 try:
@@ -317,6 +319,7 @@ PAGES = [
     "📈 Statistiques du Dataset",
     "💡 Découvertes Clés",
     "🧪 Tests d'hypothèses",
+    "🌲 Ensemble Learning",
     "ℹ️ À propos",
     "🔍 Analyse des erreurs",
 ]
@@ -327,6 +330,7 @@ ticker_items = [
     "✦ MODÈLES DE MACHINE LEARNING CLASSIQUES",
     "✦ VALIDATION CROISÉE STRATIFIÉE 6-FOLD",
     "✦ SÉLECTION D'HYPERPARAMÈTRES PAR GRIDSEARCHCV",
+    "✦ ENSEMBLE LEARNING : ADABOOST · XGBOOST · SOFT VOTING",
 ]
 ticker_html = "".join(f"<span>{t}</span>" for t in ticker_items)
 
@@ -390,7 +394,7 @@ if page == PAGES[0]:
     k1, k2, k3, k4 = st.columns(4)
     for col, val, lbl in [
         (k1, "23 465", "Avis clients"),
-        (k2, "6", "Algorithmes comparés"),
+        (k2, "9", "Algorithmes comparés"),
         (k3, "0.9622", "Meilleur F1-Score"),
         (k4, "Linear SVC", "Modèle champion"),
     ]:
@@ -402,7 +406,7 @@ if page == PAGES[0]:
     for col, ico, ttl, txt in [
         (p1, "🗂️", "1. Données", "Women's E-Commerce Clothing Reviews, cible binaire <i>Recommended IND</i>."),
         (p2, "🧹", "2. Prétraitement", "TF-IDF sur le texte, One-Hot Encoding des catégories : 13 035 variables."),
-        (p3, "🤖", "3. Modélisation", "6 algorithmes, GridSearchCV, validation croisée stratifiée 6-Fold."),
+        (p3, "🤖", "3. Modélisation", "9 algorithmes (dont 3 d'Ensemble Learning), GridSearchCV, validation croisée stratifiée 6-Fold."),
         (p4, "🚀", "4. Déploiement", "Prédiction en direct via ce tableau de bord Streamlit."),
     ]:
         with col:
@@ -945,9 +949,474 @@ if page == PAGES[5]:
         )
 
 # ==============================================================================
-# PAGE 7 : À PROPOS
+# PAGE 7 : ENSEMBLE LEARNING (AdaBoost, XGBoost, Soft Voting)
 # ==============================================================================
+ENS_ORDER = ["AdaBoost", "XGBoost", "Soft Voting (NB + RF)", "Random Forest", "Linear SVC"]
+ENS_PALETTE = {
+    "AdaBoost": "#D81B60",
+    "XGBoost": "#880E4F",
+    "Soft Voting (NB + RF)": "#C9A227",
+    "Random Forest": "#F06292",
+    "Linear SVC": "#7B5E7B",
+}
+ENS_LENGTH_LABELS = ["≤ 20 mots", "21-40", "41-60", "61-80", "> 80 mots"]
+
+
+@st.cache_data
+def load_ensemble_data():
+    """Charge les fichiers produits par les notebooks 04 et 05 (None s'ils sont absents)."""
+    needed = ["error_analysis.csv", "ensemble_feature_importance.csv", "ensemble_block_importance.csv"]
+    if not all((MODELS_DIR / f).exists() for f in needed):
+        return None
+    errors_df = pd.read_csv(MODELS_DIR / "error_analysis.csv", keep_default_na=False)
+    features_df = pd.read_csv(MODELS_DIR / "ensemble_feature_importance.csv")
+    blocks_df = pd.read_csv(MODELS_DIR / "ensemble_block_importance.csv", index_col="Bloc")
+    return errors_df, features_df, blocks_df
+
+
+def ens_confusion(y_true, score, threshold):
+    """Renvoie (TN, FP, FN, TP) ; la classe 1 (recommandé) est la classe positive."""
+    pred = (score >= threshold).astype(int)
+    tn = int(((y_true == 0) & (pred == 0)).sum())
+    fp = int(((y_true == 0) & (pred == 1)).sum())
+    fn = int(((y_true == 1) & (pred == 0)).sum())
+    tp = int(((y_true == 1) & (pred == 1)).sum())
+    return tn, fp, fn, tp
+
+
+def ens_metrics(y_true, score, threshold):
+    """Métriques globales et par classe pour un seuil de décision donné."""
+    tn, fp, fn, tp = ens_confusion(y_true, score, threshold)
+
+    def div(a, b):
+        return a / b if b else 0.0
+
+    p0, r0 = div(tn, tn + fn), div(tn, tn + fp)
+    p1, r1 = div(tp, tp + fp), div(tp, tp + fn)
+    return {
+        "tn": tn, "fp": fp, "fn": fn, "tp": tp,
+        "accuracy": div(tn + tp, tn + fp + fn + tp),
+        "precision_0": p0, "recall_0": r0, "f1_0": div(2 * p0 * r0, p0 + r0),
+        "precision_1": p1, "recall_1": r1, "f1_1": div(2 * p1 * r1, p1 + r1),
+    }
+
+
+def ens_downsample(frame, n_points=400):
+    """Réduit le nombre de points d'une courbe pour garder un graphique fluide."""
+    if len(frame) <= n_points:
+        return frame
+    idx = np.unique(np.linspace(0, len(frame) - 1, n_points).astype(int))
+    return frame.iloc[idx]
+
+
+def ens_colors(labels, models):
+    """Couleur de chaque courbe : celle de son modèle (labels et models dans le même ordre)."""
+    return [ENS_PALETTE.get(m, "#999999") for m in models]
+
+
+def ens_curves(y_true, errors_df, models):
+    """Courbes ROC et précision-rappel de la classe minoritaire (non recommandé)."""
+    roc_frames, pr_frames, labels = [], [], []
+    for m in models:
+        score = errors_df[m].to_numpy()
+        auc = roc_auc_score(y_true, score)
+        label = f"{m} (AUC {auc:.3f})"
+        labels.append(label)
+
+        fpr, tpr, _ = roc_curve(y_true, score)
+        roc = ens_downsample(pd.DataFrame({"FPR": fpr, "TPR": tpr}))
+        roc["Modele"] = label
+        roc_frames.append(roc)
+
+        precision, recall, _ = precision_recall_curve(1 - y_true, 1 - score)
+        pr = ens_downsample(pd.DataFrame({"Rappel": recall, "Precision": precision}))
+        pr["Modele"] = label
+        pr_frames.append(pr)
+    return pd.concat(roc_frames, ignore_index=True), pd.concat(pr_frames, ignore_index=True), labels
+
+
+def ens_threshold_frame(y_true, score):
+    """Précision, rappel et F1 de la classe non recommandé en fonction du seuil."""
+    rows = []
+    for t in np.arange(0.05, 0.96, 0.01):
+        m = ens_metrics(y_true, score, t)
+        rows.append({"Seuil": round(float(t), 2), "Mesure": "Précision", "Valeur": m["precision_0"]})
+        rows.append({"Seuil": round(float(t), 2), "Mesure": "Rappel", "Valeur": m["recall_0"]})
+        rows.append({"Seuil": round(float(t), 2), "Mesure": "F1", "Valeur": m["f1_0"]})
+    return pd.DataFrame(rows)
+
+
+def ens_error_rates(group, is_error):
+    """Taux d'erreur (en %) et effectif pour chaque groupe."""
+    frame = pd.DataFrame({"Groupe": group.astype(str).to_numpy(), "Erreur": is_error.astype(int)})
+    out = frame.groupby("Groupe", sort=False)["Erreur"].agg(["mean", "size"]).reset_index()
+    out.columns = ["Groupe", "Taux", "Effectif"]
+    out["Taux"] = (out["Taux"] * 100).round(1)
+    return out
+
+
+def ens_confusion_chart(tn, fp, fn, tp):
+    labels = ["Non recommandé", "Recommandé"]
+    cm = pd.DataFrame(
+        [
+            ("Non recommandé", "Non recommandé", tn),
+            ("Non recommandé", "Recommandé", fp),
+            ("Recommandé", "Non recommandé", fn),
+            ("Recommandé", "Recommandé", tp),
+        ],
+        columns=["Reel", "Predit", "Effectif"],
+    )
+    totals = cm.groupby("Reel")["Effectif"].transform("sum")
+    cm["Part"] = np.where(totals > 0, cm["Effectif"] / totals.replace(0, 1), 0.0)
+    cm["Texte"] = [f"{int(e)} ({p:.0%})" for e, p in zip(cm["Effectif"], cm["Part"])]
+
+    base = alt.Chart(cm).encode(
+        x=alt.X("Predit:N", sort=labels, title="Classe prédite", axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("Reel:N", sort=labels, title="Classe réelle"),
+    )
+    heat = base.mark_rect().encode(
+        color=alt.Color("Part:Q", scale=alt.Scale(domain=[0, 1], range=["#FFF0F5", "#D81B60"]), legend=None),
+        tooltip=[
+            alt.Tooltip("Reel:N", title="Classe réelle"),
+            alt.Tooltip("Predit:N", title="Classe prédite"),
+            alt.Tooltip("Effectif:Q", title="Nombre d'avis"),
+            alt.Tooltip("Part:Q", title="Part de la classe réelle", format=".1%"),
+        ],
+    )
+    text = base.mark_text(fontSize=15, fontWeight="bold").encode(
+        text="Texte:N",
+        color=alt.condition(alt.datum.Part > 0.5, alt.value("white"), alt.value("#2D1420")),
+    )
+    return (heat + text).properties(height=300, width="container")
+
+
+def ens_bar_chart(frame, x_title, order):
+    """Barres du taux d'erreur par groupe, avec infobulle."""
+    return (
+        alt.Chart(frame)
+        .mark_bar(color="#D81B60")
+        .encode(
+            x=alt.X("Groupe:N", sort=order, title=x_title, axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("Taux:Q", title="Taux d'erreur (%)"),
+            tooltip=[
+                alt.Tooltip("Groupe:N", title=x_title),
+                alt.Tooltip("Taux:Q", title="Taux d'erreur (%)", format=".1f"),
+                alt.Tooltip("Effectif:Q", title="Nombre d'avis"),
+            ],
+        )
+        .properties(height=260, width="container")
+    )
+
+
 if page == PAGES[6]:
+    st.markdown('<div class="section-title">🌲 Ensemble Learning : AdaBoost, XGBoost et Soft Voting</div>', unsafe_allow_html=True)
+    st.markdown(
+        h("""
+        <div class="info-card"><b>Idée :</b> au lieu de s'appuyer sur un seul modèle, les méthodes d'ensemble en
+        combinent plusieurs. <b>AdaBoost</b> et <b>XGBoost</b> sont des méthodes de <i>boosting</i> : les arbres sont
+        construits l'un après l'autre, chacun corrigeant les erreurs du précédent. Le <b>Soft Voting</b> (bonus)
+        fait voter Naïve Bayes et Random Forest sur leurs probabilités. Le Random Forest (<i>bagging</i>) et le
+        champion Linear SVC servent de références.</div>
+        <div class="info-card"><b>Classe 0 = « non recommandé »</b> (la classe minoritaire, environ 18 % des avis).
+        L'accuracy seule étant trompeuse sur des classes déséquilibrées, l'analyse porte surtout sur la précision,
+        le rappel et le F1 de cette classe. Le modèle utilisé pour la prédiction en direct reste Linear SVC.</div>
+        """),
+        unsafe_allow_html=True,
+    )
+
+    ens_data = load_ensemble_data()
+    if ens_data is None:
+        st.warning(
+            "Fichiers introuvables dans `models/`. Exécutez d'abord les notebooks "
+            "`04_ensemble_learning` puis `05_error_analysis`."
+        )
+    else:
+        errors_df, features_df, blocks_df = ens_data
+        models = [m for m in ENS_ORDER if m in errors_df.columns]
+        y_true = errors_df["y_true"].to_numpy()
+
+        ctrl_a, ctrl_b = st.columns([1, 2])
+        with ctrl_a:
+            selected = st.selectbox("Modèle analysé", models, key="ens_model")
+        with ctrl_b:
+            threshold = st.slider(
+                "Seuil de décision (score minimal pour prédire « recommandé »)",
+                min_value=0.05, max_value=0.95, value=0.50, step=0.01, key="ens_threshold",
+            )
+        st.markdown(
+            '<div class="hint">Un seuil plus élevé rend le modèle plus méfiant : il détecte plus d\'avis négatifs '
+            '(meilleur rappel de la classe 0) mais se trompe plus souvent sur les avis positifs.</div>',
+            unsafe_allow_html=True,
+        )
+
+        rows = []
+        for m in models:
+            score_m = errors_df[m].to_numpy()
+            rows.append({"model": m, **ens_metrics(y_true, score_m, threshold), "auc": roc_auc_score(y_true, score_m)})
+        all_metrics = pd.DataFrame(rows)
+        best_f1 = all_metrics.loc[all_metrics["f1_0"].idxmax()]
+        best_auc = all_metrics.loc[all_metrics["auc"].idxmax()]
+
+        k1, k2, k3, k4 = st.columns(4)
+        for col, val, lbl in [
+            (k1, f"{len(errors_df):,}".replace(",", " "), "Avis de test"),
+            (k2, f"{(y_true == 0).mean():.1%}", "Avis non recommandés"),
+            (k3, f"{best_f1['f1_0']:.3f}", f"Meilleur F1 classe 0 · {esc(best_f1['model'])}"),
+            (k4, f"{best_auc['auc']:.4f}", f"Meilleur ROC-AUC · {esc(best_auc['model'])}"),
+        ]:
+            with col:
+                st.markdown(
+                    f'<div class="metric-card"><div class="metric-val">{val}</div><div class="metric-lbl">{lbl}</div></div>',
+                    unsafe_allow_html=True,
+                )
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        tab_cmp, tab_cm, tab_roc, tab_err, tab_feat = st.tabs(
+            ["📊 Comparatif", "🧮 Matrice de confusion", "📈 Courbes ROC et PR", "🔍 Analyse des erreurs", "🧠 Variables"]
+        )
+
+        # ---------------------------------------------------------------- Comparatif
+        with tab_cmp:
+            table = all_metrics[
+                ["model", "accuracy", "auc", "precision_0", "recall_0", "f1_0", "precision_1", "recall_1", "f1_1"]
+            ].rename(columns={
+                "model": "Modèle", "accuracy": "Accuracy", "auc": "ROC-AUC",
+                "precision_0": "Précision (0)", "recall_0": "Rappel (0)", "f1_0": "F1 (0)",
+                "precision_1": "Précision (1)", "recall_1": "Rappel (1)", "f1_1": "F1 (1)",
+            })
+            metric_cols = [c for c in table.columns if c != "Modèle"]
+            st.dataframe(
+                table.style.highlight_max(subset=metric_cols, color="#F8BBD0").format({c: "{:.3f}" for c in metric_cols}),
+                hide_index=True,
+            )
+            st.caption("(0) = non recommandé, (1) = recommandé. Valeurs calculées sur les avis de test au seuil choisi ci-dessus.")
+
+            long_df = table.melt(
+                id_vars="Modèle", value_vars=["Précision (0)", "Rappel (0)", "F1 (0)"],
+                var_name="Mesure", value_name="Valeur",
+            )
+            bars = (
+                alt.Chart(long_df)
+                .mark_bar()
+                .encode(
+                    x=alt.X("Modèle:N", sort=models, title=None, axis=alt.Axis(labelAngle=0)),
+                    xOffset="Mesure:N",
+                    y=alt.Y("Valeur:Q", title="Valeur", scale=alt.Scale(domain=[0, 1])),
+                    color=alt.Color(
+                        "Mesure:N", title="Classe non recommandé",
+                        scale=alt.Scale(domain=["Précision (0)", "Rappel (0)", "F1 (0)"],
+                                        range=["#F8BBD0", "#F06292", "#880E4F"]),
+                    ),
+                    tooltip=["Modèle:N", "Mesure:N", alt.Tooltip("Valeur:Q", format=".3f")],
+                )
+                .properties(height=320, width="container")
+            )
+            st.altair_chart(bars, width="stretch")
+
+        # ----------------------------------------------------- Matrice de confusion
+        with tab_cm:
+            sel = all_metrics[all_metrics["model"] == selected].iloc[0]
+            left, right = st.columns([1.1, 1], gap="large")
+            with left:
+                st.markdown(f'<div class="section-title" style="font-size:1.1rem;">{esc(selected)} · seuil {threshold:.2f}</div>', unsafe_allow_html=True)
+                st.altair_chart(ens_confusion_chart(sel["tn"], sel["fp"], sel["fn"], sel["tp"]), width="stretch")
+                st.caption("Chaque case indique le nombre d'avis et la part de la classe réelle (ligne). Survolez une case pour le détail.")
+            with right:
+                st.markdown(
+                    h(f"""
+                    <div class="info-card"><b>Classe 0 · non recommandé</b><br>
+                    Précision : <b>{sel['precision_0']:.3f}</b> · Rappel : <b>{sel['recall_0']:.3f}</b> · F1 : <b>{sel['f1_0']:.3f}</b></div>
+                    <div class="info-card"><b>Classe 1 · recommandé</b><br>
+                    Précision : <b>{sel['precision_1']:.3f}</b> · Rappel : <b>{sel['recall_1']:.3f}</b> · F1 : <b>{sel['f1_1']:.3f}</b></div>
+                    <div class="info-card"><b>Erreurs :</b> {int(sel['fp'])} avis négatifs manqués (faux positifs) et
+                    {int(sel['fn'])} fausses alertes (faux négatifs), soit {(sel['fp'] + sel['fn']) / len(errors_df):.1%} des avis de test.</div>
+                    """),
+                    unsafe_allow_html=True,
+                )
+
+            sweep = ens_threshold_frame(y_true, errors_df[selected].to_numpy())
+            lines = (
+                alt.Chart(sweep)
+                .mark_line(strokeWidth=2.5)
+                .encode(
+                    x=alt.X("Seuil:Q", title="Seuil de décision", scale=alt.Scale(domain=[0.05, 0.95])),
+                    y=alt.Y("Valeur:Q", title="Classe non recommandé", scale=alt.Scale(domain=[0, 1])),
+                    color=alt.Color(
+                        "Mesure:N", title=None,
+                        scale=alt.Scale(domain=["Précision", "Rappel", "F1"], range=["#F8BBD0", "#F06292", "#880E4F"]),
+                    ),
+                    tooltip=["Mesure:N", "Seuil:Q", alt.Tooltip("Valeur:Q", format=".3f")],
+                )
+            )
+            rule = (
+                alt.Chart(pd.DataFrame({"Seuil": [float(threshold)]}))
+                .mark_rule(strokeDash=[5, 4], color="#2D1420")
+                .encode(x="Seuil:Q")
+            )
+            st.markdown('<div class="section-title" style="margin-top:1rem;font-size:1.1rem;">Effet du seuil sur la classe non recommandé</div>', unsafe_allow_html=True)
+            st.altair_chart(alt.layer(lines, rule).properties(height=280, width="container"), width="stretch")
+            st.markdown(
+                '<div class="disclaimer">Le seuil est ici ajusté sur les avis de test : il sert à comprendre le compromis '
+                'précision / rappel, pas à annoncer une performance finale.</div>',
+                unsafe_allow_html=True,
+            )
+
+        with tab_roc:
+            chosen = st.multiselect("Modèles à comparer", models, default=models, key="ens_curve_models")
+            if not chosen:
+                st.info("Sélectionnez au moins un modèle.")
+            else:
+                roc_df, pr_df, curve_labels = ens_curves(y_true, errors_df, chosen)
+                color_scale = alt.Scale(domain=curve_labels, range=ens_colors(curve_labels, chosen))
+
+                roc_chart = (
+                    alt.Chart(roc_df)
+                    .mark_line(strokeWidth=2.2)
+                    .encode(
+                        x=alt.X("FPR:Q", title="Taux de faux positifs", scale=alt.Scale(domain=[0, 1])),
+                        y=alt.Y("TPR:Q", title="Taux de vrais positifs", scale=alt.Scale(domain=[0, 1])),
+                        color=alt.Color("Modele:N", title=None, scale=color_scale),
+                        tooltip=["Modele:N", alt.Tooltip("FPR:Q", format=".3f"), alt.Tooltip("TPR:Q", format=".3f")],
+                    )
+                )
+                diagonal = (
+                    alt.Chart(pd.DataFrame({"x": [0, 1], "y": [0, 1]}))
+                    .mark_line(strokeDash=[4, 4], color="#999999")
+                    .encode(x="x:Q", y="y:Q")
+                )
+                pr_chart = (
+                    alt.Chart(pr_df)
+                    .mark_line(strokeWidth=2.2)
+                    .encode(
+                        x=alt.X("Rappel:Q", title="Rappel (non recommandé)", scale=alt.Scale(domain=[0, 1])),
+                        y=alt.Y("Precision:Q", title="Précision (non recommandé)", scale=alt.Scale(domain=[0, 1])),
+                        color=alt.Color("Modele:N", title=None, scale=color_scale),
+                        tooltip=["Modele:N", alt.Tooltip("Rappel:Q", format=".3f"), alt.Tooltip("Precision:Q", format=".3f")],
+                    )
+                )
+
+                c_roc, c_pr = st.columns(2, gap="large")
+                with c_roc:
+                    st.markdown('<div class="section-title" style="font-size:1.1rem;">Courbes ROC</div>', unsafe_allow_html=True)
+                    st.altair_chart(alt.layer(roc_chart, diagonal).properties(height=360, width="container"), width="stretch")
+                with c_pr:
+                    st.markdown('<div class="section-title" style="font-size:1.1rem;">Précision-rappel (classe non recommandé)</div>', unsafe_allow_html=True)
+                    st.altair_chart(pr_chart.properties(height=360, width="container"), width="stretch")
+                st.caption(
+                    "Plus une courbe ROC est proche du coin supérieur gauche, meilleur est le modèle. La courbe "
+                    "précision-rappel montre le prix à payer en précision pour détecter davantage d'avis négatifs."
+                )
+
+        with tab_err:
+            pred_sel = (errors_df[selected].to_numpy() >= threshold).astype(int)
+            is_error = pred_sel != y_true
+            length_group = pd.cut(
+                errors_df["n_words"], [-1, 20, 40, 60, 80, 10000], labels=ENS_LENGTH_LABELS
+            )
+
+            st.markdown(
+                f'<div class="section-title" style="font-size:1.1rem;">Où {esc(selected)} se trompe-t-il ? (seuil {threshold:.2f})</div>',
+                unsafe_allow_html=True,
+            )
+            e1, e2, e3 = st.columns(3, gap="medium")
+            with e1:
+                st.markdown("**Par note (Rating)**")
+                by_rating = ens_error_rates(errors_df["Rating"], is_error)
+                st.altair_chart(ens_bar_chart(by_rating, "Note", ["1", "2", "3", "4", "5"]), width="stretch")
+            with e2:
+                st.markdown("**Par département**")
+                by_dept = ens_error_rates(errors_df["Department Name"], is_error)
+                by_dept = by_dept[by_dept["Effectif"] >= 30]
+                dept_order = by_dept.sort_values("Effectif", ascending=False)["Groupe"].tolist()
+                st.altair_chart(ens_bar_chart(by_dept, "Département", dept_order), width="stretch")
+            with e3:
+                st.markdown("**Par longueur de l'avis**")
+                by_len = ens_error_rates(length_group, is_error)
+                st.altair_chart(ens_bar_chart(by_len, "Longueur", ENS_LENGTH_LABELS), width="stretch")
+            st.caption("Les départements de moins de 30 avis de test ne sont pas affichés.")
+
+            st.markdown('<div class="section-title" style="margin-top:1rem;font-size:1.1rem;">Avis mal classés</div>', unsafe_allow_html=True)
+            f1c, f2c, f3c = st.columns([1.3, 1, 1])
+            with f1c:
+                kind = st.radio(
+                    "Type d'erreur",
+                    ["Toutes les erreurs", "Avis négatifs manqués (FP)", "Fausses alertes (FN)"],
+                    key="ens_kind",
+                )
+            with f2c:
+                ratings = st.multiselect("Notes", [1, 2, 3, 4, 5], default=[1, 2, 3, 4, 5], key="ens_ratings")
+            with f3c:
+                n_rows = st.slider("Nombre d'avis affichés", min_value=5, max_value=100, value=20, step=5, key="ens_nrows")
+
+            wrong = errors_df.loc[is_error].copy()
+            wrong["Type d'erreur"] = np.where(
+                y_true[is_error] == 0, "Avis négatif manqué (FP)", "Fausse alerte (FN)"
+            )
+            wrong["Confiance"] = np.where(pred_sel[is_error] == 1, wrong[selected], 1 - wrong[selected])
+            if kind == "Avis négatifs manqués (FP)":
+                wrong = wrong[wrong["Type d'erreur"].str.contains("FP")]
+            elif kind == "Fausses alertes (FN)":
+                wrong = wrong[wrong["Type d'erreur"].str.contains("FN")]
+            wrong = wrong[wrong["Rating"].isin(ratings)]
+            wrong = wrong.sort_values("Confiance", ascending=False).head(n_rows)
+
+            st.caption("Triés par confiance décroissante : les erreurs les plus sûres d'elles-mêmes sont les plus instructives.")
+            if wrong.empty:
+                st.info("Aucun avis mal classé pour ces filtres.")
+            else:
+                shown = wrong[["Type d'erreur", "Rating", "Department Name", "Confiance", "Title", "Review Text"]].rename(
+                    columns={"Rating": "Note", "Department Name": "Département", "Title": "Titre", "Review Text": "Avis"}
+                )
+                shown["Confiance"] = shown["Confiance"].round(2)
+                st.dataframe(shown, hide_index=True)
+
+        with tab_feat:
+            feat_models = [m for m in ["XGBoost", "AdaBoost"] if m in features_df["Model"].unique()]
+            if not feat_models:
+                st.info("Aucune importance de variables disponible.")
+            else:
+                f_left, f_right = st.columns([1.3, 1], gap="large")
+                with f_left:
+                    feat_model = st.radio("Modèle", feat_models, horizontal=True, key="ens_feat_model")
+                    top = features_df[features_df["Model"] == feat_model].sort_values("Importance", ascending=False).head(15)
+                    top_chart = (
+                        alt.Chart(top)
+                        .mark_bar(color="#D81B60")
+                        .encode(
+                            y=alt.Y("Feature:N", sort="-x", title=None),
+                            x=alt.X("Importance:Q", title="Importance"),
+                            tooltip=["Feature:N", "Block:N", alt.Tooltip("Importance:Q", format=".4f")],
+                        )
+                        .properties(height=420, width="container")
+                    )
+                    st.altair_chart(top_chart, width="stretch")
+                with f_right:
+                    st.markdown('<div class="section-title" style="font-size:1.1rem;">Importance par bloc de variables</div>', unsafe_allow_html=True)
+                    blocks_long = (blocks_df * 100).reset_index().melt(id_vars="Bloc", var_name="Modele", value_name="Part")
+                    block_chart = (
+                        alt.Chart(blocks_long)
+                        .mark_bar()
+                        .encode(
+                            y=alt.Y("Bloc:N", title=None, axis=alt.Axis(labelLimit=220)),
+                            yOffset="Modele:N",
+                            x=alt.X("Part:Q", title="Part de l'importance (%)"),
+                            color=alt.Color("Modele:N", title=None,
+                                            scale=alt.Scale(domain=["XGBoost", "AdaBoost"], range=["#880E4F", "#F06292"])),
+                            tooltip=["Bloc:N", "Modele:N", alt.Tooltip("Part:Q", format=".1f")],
+                        )
+                        .properties(height=300, width="container")
+                    )
+                    st.altair_chart(block_chart, width="stretch")
+                st.caption(
+                    "L'importance mesure la contribution de chaque variable aux décisions des arbres. Les mots du texte "
+                    "(TF-IDF) sont très nombreux : leur part cumulée est à comparer à celle de la note (Rating)."
+                )
+
+
+# ==============================================================================
+# PAGE 8 : À PROPOS
+# ==============================================================================
+if page == PAGES[7]:
     st.markdown('<div class="section-title">ℹ️ À propos</div>', unsafe_allow_html=True)
     st.markdown(
         h("""
@@ -959,7 +1428,7 @@ if page == PAGES[6]:
     st.markdown("**Stack technique**")
     st.markdown(
         "".join(f'<span class="badge">{t}</span>' for t in
-                ["Python", "Streamlit", "scikit-learn", "pandas", "NumPy", "joblib", "TF-IDF", "GridSearchCV"]),
+                ["Python", "Streamlit", "scikit-learn", "XGBoost", "Altair", "pandas", "NumPy", "joblib", "TF-IDF", "GridSearchCV"]),
         unsafe_allow_html=True,
     )
     st.markdown(
