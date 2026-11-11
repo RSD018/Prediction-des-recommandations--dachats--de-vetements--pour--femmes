@@ -1,0 +1,5 @@
+Bloc,XGBoost,AdaBoost
+"Catégorielles (division, département, classe)",0.010127,0.005666
+"Numériques (Age, Rating, Positive Feedback Count)",0.276372,0.304299
+Avis (TF-IDF),0.616695,0.585075
+Titre (TF-IDF),0.096806,0.104961
