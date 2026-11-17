@@ -1,0 +1,1750 @@
+% !TEX program = pdflatex
+% =============================================================================
+%  Prédiction des recommandations d'achats de vêtements pour femmes
+%  Rapport technique -- Mini-projet de Data Mining, année académique 2026/2027
+%
+%  Compilation :  pdflatex main.tex   (deux passes)   ou   latexmk -pdf main.tex
+%  Document autonome : aucune image externe, toutes les figures sont dessinées
+%  avec TikZ / pgfplots.  Paquets : distribution TeX Live / MiKTeX / Overleaf.
+% =============================================================================
+\documentclass[11pt,a4paper]{report}
+
+% ----------------------------- Encodage et polices ---------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{mathptmx}                  % Times (texte et mathématiques)
+\usepackage[scaled=0.92]{helvet}       % Helvetica : titres, en-têtes
+\usepackage{courier}                   % Courier : code
+\usepackage{microtype}
+
+% ----------------------------- Langue (français) -----------------------------
+\makeatletter
+\IfFileExists{french.ldf}{%
+  \usepackage[french]{babel}%
+  \frenchbsetup{StandardLists=true}%
+}{%
+  % Repli pour une installation TeX sans babel-french (aperçu uniquement)
+  \def\og{\guillemotleft\nobreak\,}%
+  \def\fg{\unskip\nobreak\,\guillemotright}%
+  \def\figurename{Figure}\def\tablename{Tableau}%
+  \def\chaptername{Chapitre}\def\appendixname{Annexe}%
+  \hyphenpenalty=10000 \exhyphenpenalty=50 \tolerance=3000
+}
+\makeatother
+\newcommand{\gl}[1]{\og #1\fg{}}       % « guillemets français »
+
+% ----------------------------- Mise en page ----------------------------------
+\usepackage[a4paper,left=2.5cm,right=2.5cm,top=2.8cm,bottom=2.7cm,
+            headheight=14pt,headsep=0.85cm,footskip=1.05cm]{geometry}
+\usepackage{parskip}
+\linespread{1.07}
+\setlength{\parskip}{0.55em plus 0.15em minus 0.05em}
+\setlength{\emergencystretch}{3em}
+\raggedbottom
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=3pt,parsep=0pt}
+\setlist[itemize]{leftmargin=1.45em,label=\textbullet}
+\setlist[enumerate]{leftmargin=1.75em}
+\usepackage{needspace}
+\usepackage{etoolbox}
+
+% ----------------------------- Couleurs --------------------------------------
+\usepackage[table]{xcolor}
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{azur}{HTML}{2F5D8A}
+\definecolor{ardoise}{HTML}{5C6573}
+\definecolor{rose}{HTML}{C86A89}
+\definecolor{vert}{HTML}{4C9A7B}
+\definecolor{ambre}{HTML}{E0A030}
+\definecolor{rowalt}{HTML}{F2F4F8}
+\definecolor{rulegray}{HTML}{C9CED6}
+\definecolor{codebg}{HTML}{F6F8FA}
+\definecolor{codeframe}{HTML}{D0D7DE}
+
+% ----------------------------- Titres ----------------------------------------
+\usepackage{titlesec}
+\titleformat{\chapter}[block]
+  {\raggedright\sffamily\bfseries\fontsize{25}{29}\selectfont\color{navy}}
+  {\thechapter\hspace{0.6em}}{0pt}{}[{\vspace{4pt}\color{azur}\titlerule[0.9pt]}]
+\titleformat{name=\chapter,numberless}[block]
+  {\raggedright\sffamily\bfseries\fontsize{25}{29}\selectfont\color{navy}}
+  {}{0pt}{}[{\vspace{4pt}\color{azur}\titlerule[0.9pt]}]
+\titlespacing*{\chapter}{0pt}{-4pt}{24pt}
+\titleformat{\section}{\sffamily\bfseries\fontsize{15}{18}\selectfont\color{navy}}{\thesection}{0.65em}{}
+\titlespacing*{\section}{0pt}{17pt plus 4pt minus 2pt}{7pt plus 2pt}
+\titleformat{\subsection}{\sffamily\bfseries\fontsize{11.5}{14}\selectfont\color{azur}}{\thesubsection}{0.65em}{}
+\titlespacing*{\subsection}{0pt}{12pt plus 3pt minus 2pt}{4pt plus 1pt}
+\setcounter{secnumdepth}{2}
+\setcounter{tocdepth}{1}
+\numberwithin{equation}{chapter}
+
+% ----------------------------- En-têtes et pieds de page ---------------------
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\newcommand{\hdrfont}{\sffamily\footnotesize\color{ardoise}}
+\renewcommand{\chaptermark}[1]{\markboth{\thechapter\ #1}{}}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyhead[L]{\hdrfont Prédiction des recommandations d'achats --- Rapport technique}%
+  \fancyhead[R]{\hdrfont\nouppercase{\leftmark}}%
+  \fancyfoot[L]{\hdrfont Mini-projet de Data Mining --- Année académique 2026/2027}%
+  \fancyfoot[R]{\hdrfont Page \thepage\ / \pageref{LastPage}}%
+  \renewcommand{\headrulewidth}{0.4pt}\renewcommand{\footrulewidth}{0.4pt}%
+  \renewcommand{\headrule}{{\color{rulegray}\hrule width\headwidth height\headrulewidth}}%
+  \renewcommand{\footrule}{{\color{rulegray}\hrule width\headwidth height\footrulewidth}}%
+}
+\pagestyle{plain}
+
+% Chapitres non numérotés (Résumé, Références) et listes en français
+\makeatletter
+\newcommand{\starchapter}[1]{\chapter*{#1}\addcontentsline{toc}{chapter}{#1}\markboth{#1}{}}
+\newcommand{\frontlist}[2]{\chapter*{#1}\markboth{#1}{}\@starttoc{#2}}
+\makeatother
+
+% ----------------------------- Table des matières ----------------------------
+\usepackage{tocloft}
+\renewcommand{\cftdotsep}{1.6}
+\renewcommand{\cftchapfont}{\sffamily\bfseries\color{navy}}
+\renewcommand{\cftchappagefont}{\sffamily\bfseries\color{navy}}
+\renewcommand{\cftchapleader}{\sffamily\bfseries\color{navy}\cftdotfill{\cftdotsep}}
+\setlength{\cftbeforechapskip}{10pt plus 1pt}
+\setlength{\cftchapnumwidth}{1.6em}
+\setlength{\cftsecindent}{1.4em}\setlength{\cftsecnumwidth}{2.7em}
+\renewcommand{\cftsecfont}{\small}\renewcommand{\cftsecpagefont}{\small}
+\setlength{\cftbeforesecskip}{3pt}
+\renewcommand{\cftfigpresnum}{Figure~}\renewcommand{\cftfigaftersnum}{\ ---}
+\setlength{\cftfignumwidth}{5.6em}\setlength{\cftfigindent}{0pt}
+\renewcommand{\cfttabpresnum}{Tableau~}\renewcommand{\cfttabaftersnum}{\ ---}
+\setlength{\cfttabnumwidth}{6.3em}\setlength{\cfttabindent}{0pt}
+\renewcommand{\cftfigfont}{\small}\renewcommand{\cftfigpagefont}{\small}
+\renewcommand{\cfttabfont}{\small}\renewcommand{\cfttabpagefont}{\small}
+\setlength{\cftbeforefigskip}{3pt}\setlength{\cftbeforetabskip}{3pt}
+
+% ----------------------------- Légendes --------------------------------------
+\usepackage{caption}
+\DeclareCaptionLabelSeparator{emdash}{~--- }
+\captionsetup{font={small,it,color=ardoise},labelfont={bf,it},labelsep=emdash,
+              justification=centering,width=0.92\linewidth}
+\captionsetup[table]{position=top,skip=5pt}
+\captionsetup[figure]{position=bottom,skip=6pt}
+\usepackage{float}
+
+% ----------------------------- Tableaux --------------------------------------
+\usepackage{array,longtable,multirow}
+\setlength{\tabcolsep}{5pt}
+\setlength{\extrarowheight}{2.2pt}
+\setlength{\LTpre}{6pt}\setlength{\LTpost}{8pt}
+\newcommand{\cw}[1]{\dimexpr#1\textwidth-2\tabcolsep\relax}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{\cw{#1}}}
+\newcolumntype{B}[1]{>{\raggedright\arraybackslash\bfseries}p{\cw{#1}}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{\cw{#1}}}
+\newcommand{\hc}[1]{\textcolor{white}{\sffamily\bfseries #1}}
+% ltab[taille]{colonnes}{légende}{étiquette}{en-tête}
+\newenvironment{ltab}[5][\small]
+  {\begingroup #1\renewcommand{\arraystretch}{1.12}%
+   \rowcolors{2}{white}{rowalt}%
+   \begin{longtable}{#2}
+   \caption{#3}\label{#4}\\
+   \rowcolor{navy}#5\\*
+   \endfirsthead
+   \rowcolor{navy}#5\\*
+   \endhead
+   \arrayrulecolor{rulegray}\hline\endfoot
+   \arrayrulecolor{rulegray}\hline\endlastfoot}
+  {\end{longtable}\endgroup}
+
+% ----------------------------- Code en ligne et blocs ------------------------
+\usepackage{url}
+\urlstyle{tt}
+\makeatletter
+\DeclareRobustCommand{\code}[1]{{\ttfamily\fontsize{\strip@pt\dimexpr\f@size pt*9/10\relax}{\f@baselineskip}\selectfont\detokenize{#1}}}
+\makeatother
+\renewcommand{\UrlFont}{\ttfamily\footnotesize}
+\usepackage{fancyvrb,pmboxdraw}
+\usepackage[most]{tcolorbox}
+\newtcolorbox{codebox}[1][]{enhanced,colback=codebg,colframe=codeframe,boxrule=0.5pt,arc=2pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,before skip=7pt,after skip=9pt,#1}
+
+% Encadrés : note (bleu), mise en garde (ambre), piège (rose)
+\newtcolorbox{calloutnote}[1]{enhanced,breakable,frame hidden,boxrule=0pt,sharp corners,
+  borderline west={2.6pt}{0pt}{azur},colback=azur!8!white,left=9pt,right=8pt,top=6pt,bottom=6pt,
+  before skip=9pt,after skip=9pt,fontupper=\small,
+  before upper={\noindent{\sffamily\bfseries\small\color{navy}#1}\par\vspace{2pt}}}
+\newtcolorbox{calloutwarn}[1]{enhanced,breakable,frame hidden,boxrule=0pt,sharp corners,
+  borderline west={2.6pt}{0pt}{ambre},colback=ambre!10!white,left=9pt,right=8pt,top=6pt,bottom=6pt,
+  before skip=9pt,after skip=9pt,fontupper=\small,
+  before upper={\noindent{\sffamily\bfseries\small\color{ambre!45!black}#1}\par\vspace{2pt}}}
+\newtcolorbox{calloutpink}[1]{enhanced,breakable,frame hidden,boxrule=0pt,sharp corners,
+  borderline west={2.6pt}{0pt}{rose},colback=rose!9!white,left=9pt,right=8pt,top=6pt,bottom=6pt,
+  before skip=9pt,after skip=9pt,fontupper=\small,
+  before upper={\noindent{\sffamily\bfseries\small\color{rose!35!black}#1}\par\vspace{2pt}}}
+
+% ----------------------------- Figures (TikZ / pgfplots) ---------------------
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds,shapes.geometric,babel}
+\tikzset{>=Stealth,
+  box/.style={rounded corners=3pt,draw=navy,fill=navy!6,line width=0.8pt,align=center,
+              font=\sffamily\scriptsize,inner sep=4pt,text=black},
+  boxrose/.style={box,draw=rose,fill=rose!12},
+  boxvert/.style={box,draw=vert,fill=vert!12},
+  flow/.style={-{Stealth[length=2.2mm]},draw=ardoise!80,line width=0.9pt}}
+\pgfplotsset{every axis/.append style={font=\sffamily\scriptsize,tick label style={font=\sffamily\tiny},
+  label style={font=\sffamily\scriptsize}}}
+\newcommand{\figtitle}[1]{{\sffamily\bfseries\small\color{navy}#1}}
+
+% ----------------------------- Divers ----------------------------------------
+\newcommand{\pc}{\,\%}                 % espace fine avant le signe \%
+\newcommand{\ie}{c'est-à-dire}
+\usepackage[hidelinks,unicode=true,pdfusetitle=false,
+  pdftitle={Prédiction des recommandations d'achats de vêtements pour femmes --- Rapport technique},
+  pdfauthor={Équipe projet Data Mining (dépôt GitHub RSD018)},
+  pdfsubject={Mini-projet de Data Mining 2026/2027 --- Classification supervisée},
+  pdfkeywords={Data Mining, classification supervisée, TF-IDF, SVM linéaire, GridSearchCV, Streamlit}]{hyperref}
+
+\begin{document}
+% ============================== COUVERTURE ===================================
+\thispagestyle{empty}
+\begingroup
+\centering\setlength{\parskip}{0pt}
+\vspace*{0.4cm}
+{\sffamily\bfseries\footnotesize\color{ardoise}MINI-PROJET DE DATA MINING\par\vspace{5pt}
+ ANNÉE ACADÉMIQUE 2026/2027 \textperiodcentered\ PARCOURS A : CLASSIFICATION SUPERVISÉE\par}
+\vspace{1.3cm}
+{\color{rose}\rule{4.4cm}{2.2pt}}\par
+\vspace{1.1cm}
+{\sffamily\bfseries\fontsize{30}{37}\selectfont\color{navy}
+ Prédiction des recommandations\\ d'achats de vêtements pour\\ femmes\par}
+\vspace{0.9cm}
+{\sffamily\fontsize{14}{19}\selectfont\color{azur}
+ Classification supervisée des avis du jeu de données\\
+ \textit{Women's E-Commerce Clothing Reviews}\par}
+\vspace{1.0cm}
+{\color{rose}\rule{4.4cm}{2.2pt}}\par
+\vspace{0.8cm}
+{\sffamily\bfseries\fontsize{17}{21}\selectfont\color{navy}Rapport technique\par}
+\vspace{1.5cm}
+\begingroup
+\renewcommand{\arraystretch}{1.3}\setlength{\extrarowheight}{1pt}\arrayrulecolor{rulegray}
+\newcommand{\covlab}[1]{{\sffamily\bfseries\scriptsize\color{ardoise}#1}}
+\begin{tabular}{@{}l@{\hspace{1.3cm}}p{11.0cm}@{}}
+\hline
+\covlab{COURS} & Data Mining (Fouille de Données)\\\hline
+\covlab{JEU DE DONNÉES} & Women's E-Commerce Clothing Reviews (Kaggle) : 23\,486 avis bruts, 10 attributs\\\hline
+\covlab{APPROCHE} & Machine Learning classique ; aucun modèle de Deep Learning, aucun LLM\\\hline
+\covlab{MODÈLE RETENU} & Linear SVC : accuracy 0,9378 \textperiodcentered\ F1-score 0,9622 \textperiodcentered\ ROC-AUC 0,9775\\\hline
+\covlab{APPLICATION} & Streamlit (src/app.py), six onglets\\\hline
+\covlab{DÉPÔT GITHUB} & \raggedright\arraybackslash github.com/RSD018/\newline {\small Prediction-des-recommandations--dachats--de-vetements--pour--femmes}\\\hline
+\covlab{ÉQUIPE} & 4 étudiants, identifiés dans les supports publics par leur code étudiant (compte GitHub du dépôt : RSD018)\\\hline
+\end{tabular}
+\endgroup
+\endgroup
+\clearpage
+
+% ============================== RÉSUMÉ =======================================
+\starchapter{Résumé}
+Ce rapport présente la conception, la réalisation et l'évaluation d'un pipeline complet de Data Mining qui prédit si une cliente \textbf{recommande} ou non un article de mode à partir de son avis (titre et texte) et de quelques métadonnées : âge, note, division, département et catégorie du produit. Le jeu de données, \textit{Women's E-Commerce Clothing Reviews}, regroupe 23\,486 avis bruts décrits par 10 attributs. La cible binaire \code{Recommended IND} est déséquilibrée : 82,2\,\% des avis sont des recommandations.
+
+La démarche suit les étapes classiques de la fouille de données. L'exploration et le nettoyage traitent les valeurs manquantes, les doublons et les valeurs atypiques (règle de Tukey) ; deux tests statistiques, le test de Mann-Whitney U et le test du $\chi^2$ d'indépendance, étudient le lien entre la cible et, respectivement, la note et le département. Le prétraitement s'appuie sur un \code{ColumnTransformer} (imputation, standardisation, encodage one-hot, TF-IDF) ajusté sur le seul jeu d'entraînement, ce qui évite toute fuite de données et produit une matrice creuse d'environ 13\,000 variables. Six approches sont ensuite comparées : un baseline Zero-R, K-NN, un arbre de décision, une forêt aléatoire, un Naïve Bayes multinomial et un SVM linéaire, les cinq modèles réglables étant optimisés par \code{GridSearchCV} avec validation croisée stratifiée. Le meilleur modèle est déployé dans une application Streamlit à six onglets.
+
+Le \textbf{Linear SVC} obtient les meilleurs résultats (accuracy 0,9378 ; F1-score 0,9622 ; ROC-AUC 0,9775), très au-dessus du baseline Zero-R (accuracy 0,8223). Une reconstitution algébrique des matrices de confusion à partir des métriques publiées montre cependant que la classe minoritaire \gl{non recommandé} reste la plus difficile à détecter (rappel estimé à environ 0,82 pour le modèle retenu). Ce constat oriente les perspectives : rééquilibrage des classes, réglage du seuil de décision, représentations textuelles enrichies. Aucun modèle de Deep Learning ni aucun LLM n'est utilisé comme modèle prédictif.
+
+\textbf{Mots-clés :} Data Mining ; classification supervisée ; classification de texte ; TF-IDF ; SVM linéaire ; GridSearchCV ; déséquilibre de classes ; fuite de données ; Streamlit.
+
+% ============================== TABLES =======================================
+\clearpage
+\frontlist{Table des matières}{toc}
+\clearpage
+\frontlist{Liste des figures}{lof}
+\clearpage
+\frontlist{Liste des tableaux}{lot}
+\clearpage
+% ============================== CHAPITRE 1 ===================================
+\newcommand{\VP}{\mathit{VP}}\newcommand{\FP}{\mathit{FP}}
+\newcommand{\FN}{\mathit{FN}}\newcommand{\VN}{\mathit{VN}}
+\newcommand{\bone}{\mathbf{1}}
+\chapter{Introduction}\label{chap:intro}
+
+\section{Contexte et motivation}
+Dans le commerce en ligne, les avis clients constituent l'une des sources de données les plus riches pour comprendre la satisfaction, repérer les défauts d'un produit ou orienter les ventes. Parmi les informations laissées par une cliente, l'indicateur \gl{je recommande ce produit} est particulièrement précieux : il résume en un seul bit un jugement global, plus directement exploitable qu'une note moyenne ou qu'un commentaire libre.
+
+Cet indicateur n'est toutefois pas toujours disponible : case facultative dans un formulaire, avis recueillis sur d'autres canaux, textes issus des réseaux sociaux. Il peut aussi sembler contredire le texte, par exemple lorsqu'une note élevée accompagne un commentaire réservé. Savoir prédire automatiquement la recommandation à partir de l'avis et de quelques métadonnées permet de compléter des données lacunaires, de détecter des incohérences et de prioriser le traitement des avis défavorables.
+
+Le présent projet s'inscrit dans le mini-projet de Data Mining de l'année 2026/2027. Il porte sur le jeu de données public \textit{Women's E-Commerce Clothing Reviews} et suit le \textbf{parcours A} du cahier des charges : la classification supervisée, réalisée exclusivement avec des algorithmes de Machine Learning classiques.
+
+\section{Problématique}
+La question centrale est la suivante : \textbf{peut-on prédire de façon fiable si une cliente recommande un article de mode à partir du titre et du texte de son avis, de sa note et de quelques caractéristiques du produit, en n'utilisant que des algorithmes de Machine Learning classiques ?} Elle se décline en cinq questions auxquelles les chapitres suivants répondent tour à tour :
+\begin{enumerate}
+\item Quelles variables sont statistiquement liées à la recommandation ? (chapitre~\ref{chap:eda})
+\item Comment combiner dans un même modèle des variables numériques, catégorielles et textuelles sans introduire de fuite de données ? (chapitre~\ref{chap:prep})
+\item Parmi les algorithmes du cours, lequel offre le meilleur compromis entre performance et coût de calcul sur des données textuelles de grande dimension ? (chapitre~\ref{chap:modeles})
+\item Comment évaluer honnêtement des modèles lorsque 82,2\,\% des avis appartiennent à la même classe ? (chapitre~\ref{chap:resultats})
+\item Comment rendre le modèle utilisable par une personne non spécialiste ? (chapitre~\ref{chap:app})
+\end{enumerate}
+
+\section{Objectifs du projet}
+\subsection{Objectifs scientifiques}
+\begin{itemize}
+\item explorer et documenter le jeu de données : types des variables, qualité, distributions, corrélations ;
+\item réaliser au moins deux tests statistiques scientifiquement appropriés et justifier explicitement leur choix ;
+\item construire un pipeline de prétraitement reproductible et exempt de fuite de données ;
+\item comparer six approches (Zero-R, K-NN, Decision Tree, Random Forest, Multinomial Naïve Bayes, Linear SVC) avec une optimisation systématique des hyperparamètres ;
+\item analyser les résultats avec des métriques adaptées à des classes déséquilibrées.
+\end{itemize}
+\subsection{Objectifs applicatifs}
+\begin{itemize}
+\item sérialiser le meilleur modèle et son préprocesseur pour les réutiliser sans ré-entraînement ;
+\item fournir une application Streamlit, exécutable en local, qui prédit la recommandation en temps réel et présente les résultats de l'étude ;
+\item documenter le dépôt GitHub (structure, installation, exécution) afin que l'ensemble soit reproductible.
+\end{itemize}
+
+\section{Périmètre et contraintes du cahier des charges}
+Le cahier des charges du mini-projet fixe des règles précises : taille minimale du jeu de données, choix d'un parcours technique, algorithmes obligatoires, interdiction du Deep Learning et des LLM comme modèles de Machine Learning, optimisation systématique des hyperparamètres, tests statistiques, application interactive, dépôt GitHub public structuré et anonymisation des supports. Le Tableau~\ref{tab:cdc} met en regard chaque exigence et la réalisation correspondante dans ce projet.
+
+\begin{ltab}{L{0.40}L{0.60}}{Correspondance entre les exigences du cahier des charges et les réalisations du projet}{tab:cdc}{\hc{Exigence du cahier des charges}&\hc{Réalisation dans le projet}}
+Jeu de données d'au moins 10\,000 enregistrements bruts & 23\,486 avis bruts (\code{data/raw/reviews.csv})\\
+Au moins 10 attributs & 10 attributs, plus une colonne d'index technique (section~\ref{sec:dico})\\
+Parcours technique A : classification supervisée & Classification binaire de la cible \code{Recommended IND}\\
+Algorithmes du cours : baseline Zero-R, K-NN, arbres et forêts, Naïve Bayes, SVM & Zero-R, K-NN, Decision Tree, Random Forest, Multinomial Naïve Bayes, Linear SVC\\
+Deep Learning et LLM interdits comme modèles ML & Aucun modèle de Deep Learning ni LLM ; aucune bibliothèque correspondante dans \code{requirements.txt}\\
+Optimisation systématique (GridSearchCV ou RandomizedSearchCV, $K \geq 5$) & GridSearchCV avec validation croisée stratifiée pour les modèles réglables (Zero-R exempté)\\
+Au moins 2 tests statistiques justifiés & Test de Mann-Whitney U (Rating $\times$ Recommended IND) et test du $\chi^2$ d'indépendance (Department Name $\times$ Recommended IND)\\
+Prétraitement : valeurs manquantes, encodage, normalisation & Imputation, standardisation Z-score, encodage one-hot, TF-IDF, sans fuite de données\\
+Comparaison multicritère des modèles & Accuracy, F1-score, ROC-AUC ; analyse par classe (section~\ref{sec:recon})\\
+Application interactive exécutable en local & Application Streamlit (\code{src/app.py}), six onglets\\
+Dépôt GitHub public et arborescence standardisée & \code{data/raw}, \code{data/processed}, \code{notebooks/}, \code{src/}, \code{docs/}, \code{requirements.txt} (+ \code{models/} pour les artefacts)\\
+Anonymat sur les supports publics & Aucun nom ni prénom : seuls les codes étudiants sont utilisés\\
+\end{ltab}
+
+\section{Organisation du rapport}
+Le rapport suit la logique d'un projet de fouille de données. Le chapitre~\ref{chap:theorie} rassemble les notions théoriques nécessaires (processus CRISP-DM, validation croisée, métriques, TF-IDF, tests statistiques). Le chapitre~\ref{chap:donnees} présente le jeu de données et le chapitre~\ref{chap:org} l'organisation du dépôt et de l'environnement. Les chapitres~\ref{chap:eda} et~\ref{chap:prep} détaillent l'exploration, le nettoyage et le prétraitement ; le chapitre~\ref{chap:modeles} décrit les algorithmes et leur optimisation ; le chapitre~\ref{chap:resultats} analyse les résultats. Le chapitre~\ref{chap:app} présente l'application, et le chapitre~\ref{chap:discussion} discute des limites et des perspectives avant la conclusion (chapitre~\ref{chap:conclusion}). Les annexes regroupent la procédure de reproduction, la dérivation des métriques reconstituées et un glossaire.
+
+\begin{calloutnote}{Convention de lecture}
+Les noms de fichiers, de fonctions et de colonnes apparaissent en \code{police à chasse fixe}. Les nombres décimaux suivent la notation française (virgule). Les chiffres de performance proviennent du README du dépôt ; les valeurs marquées \gl{reconstituées} sont déduites algébriquement de ces chiffres (section~\ref{sec:recon}), et les exemples pédagogiques utilisent des données fictives signalées comme telles.
+\end{calloutnote}
+% ============================== CHAPITRE 2 (1/2) =============================
+\chapter{Cadre théorique et notions préliminaires}\label{chap:theorie}
+Ce chapitre rassemble les notions nécessaires pour comprendre les choix techniques du projet. Chaque notion est introduite ici de façon autonome, puis appliquée aux données dans les chapitres suivants ; les renvois sont indiqués dans le texte. Les exemples numériques de ce chapitre utilisent des données fictives, recalculées avec scikit-learn et SciPy afin que chaque chiffre soit exact.
+
+\section{Démarche de fouille de données : CRISP-DM}\label{sec:crispdm}
+Un projet de Data Mining n'est pas une simple succession d'appels à des bibliothèques : c'est un processus itératif. Deux cadres de référence le décrivent : le processus KDD (\textit{Knowledge Discovery in Databases}) et la méthode CRISP-DM (\textit{Cross-Industry Standard Process for Data Mining}, Chapman et al., 2000). Nous retenons CRISP-DM, dont les six phases se retrouvent dans l'organisation du dépôt (Tableau~\ref{tab:crisp}).
+
+\begin{ltab}{B{0.20}L{0.30}L{0.50}}{Les six phases de CRISP-DM et leur mise en œuvre dans le projet}{tab:crisp}{\hc{Phase}&\hc{Question posée}&\hc{Réalisation dans le projet}}
+1. Compréhension du métier & Quel problème résoudre, avec quel critère de succès ? & Prédire la recommandation d'un article ; critères : F1-score et ROC-AUC (chapitres~\ref{chap:intro} et~\ref{chap:resultats})\\
+2. Compréhension des données & De quelles données dispose-t-on ? Sont-elles fiables ? & Jeu Kaggle de 23\,486 avis ; exploration et diagnostic de qualité (chapitres~\ref{chap:donnees} et~\ref{chap:eda})\\
+3. Préparation des données & Comment obtenir une table exploitable par les algorithmes ? & Nettoyage, imputation, standardisation, encodage one-hot, TF-IDF (chapitres~\ref{chap:eda} et~\ref{chap:prep})\\
+4. Modélisation & Quels algorithmes, quels réglages ? & Six approches comparées, GridSearchCV (chapitre~\ref{chap:modeles})\\
+5. Évaluation & Le modèle répond-il à l'objectif ? Est-il fiable ? & Jeu de test isolé, métriques adaptées au déséquilibre (chapitre~\ref{chap:resultats})\\
+6. Déploiement & Comment l'utiliser concrètement ? & Application Streamlit, artefacts sérialisés avec joblib (chapitre~\ref{chap:app})\\
+\end{ltab}
+
+Le processus est par nature itératif : l'évaluation peut conduire à revenir sur la préparation des données. C'est d'ailleurs l'une des perspectives de ce travail (chapitre~\ref{chap:discussion}).
+
+\section{Apprentissage supervisé et classification binaire}
+\subsection{Formalisation}
+En classification supervisée binaire, on dispose d'un jeu d'apprentissage $D = \{(x_i, y_i)\}$, pour $i = 1, \dots, n$. Le vecteur $x_i \in \mathbb{R}^d$ contient les variables explicatives d'un individu (ici, un avis) et $y_i \in \{0, 1\}$ est sa classe (ici, 1 si la cliente recommande l'article, 0 sinon). On cherche une fonction $f$ qui prédise correctement la classe d'individus nouveaux, jamais vus pendant l'apprentissage. Un algorithme choisit $f$ dans une famille de fonctions (arbres, hyperplans, etc.) en minimisant le \textbf{risque empirique} :
+\begin{equation}\label{eq:risque}
+R_{\mathrm{emp}}(f) = \frac{1}{n}\sum_{i=1}^{n} \bone\,[\,f(x_i) \neq y_i\,]
+\end{equation}
+où $\bone[\cdot]$ vaut 1 lorsque la condition est vraie et 0 sinon. Minimiser le seul risque empirique ne suffit pas : ce qui compte est l'erreur commise sur des données nouvelles (le \textit{risque réel}), que l'on estime sur un jeu de test tenu à l'écart.
+
+\subsection{Sous-apprentissage et surapprentissage}
+Un modèle trop simple (\textbf{sous-apprentissage}) ne capture pas la structure des données : son erreur est élevée à la fois sur l'entraînement et sur la validation. Un modèle trop flexible (\textbf{surapprentissage}) mémorise le bruit : l'erreur d'entraînement devient très faible alors que l'erreur sur de nouvelles données remonte (Figure~\ref{fig:surapp}). Les hyperparamètres (profondeur d'un arbre, nombre de voisins $K$, constante $C$ d'un SVM, etc.) servent précisément à régler cette complexité.
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.78\textwidth,height=6cm,xmin=0,xmax=1,ymin=0,ymax=1.08,axis lines=left,ticks=none,
+  xlabel={Complexité du modèle (profondeur d'arbre, 1/K, 1/C\ldots)},ylabel={Erreur},clip=false,
+  legend style={at={(0.97,0.19)},anchor=east,draw=none,fill=none,font=\sffamily\tiny,legend cell align=left}]
+\addplot[navy,thick,domain=0:1,samples=80]{0.06+0.9*exp(-5*x)};
+\addlegendentry{erreur d'entraînement}
+\addplot[rose,thick,domain=0:1,samples=80]{0.10+0.9*exp(-5*x)+0.35*x^2};
+\addlegendentry{erreur de validation}
+\draw[ardoise!70,dashed] (axis cs:0.5,0) -- (axis cs:0.5,1.0);
+\node[font=\sffamily\tiny,text=azur,align=center,anchor=south] at (axis cs:0.5,0.99) {complexité\\optimale};
+\node[font=\sffamily\tiny,text=ardoise!70,align=center] at (axis cs:0.24,0.88) {sous-apprentissage\\(biais élevé)};
+\node[font=\sffamily\tiny,text=ardoise!70,align=center] at (axis cs:0.80,0.88) {surapprentissage\\(variance élevée)};
+\end{axis}
+\end{tikzpicture}
+\caption{Sous-apprentissage et surapprentissage en fonction de la complexité du modèle (schéma illustratif).}\label{fig:surapp}
+\end{figure}
+
+Trois sous-ensembles jouent des rôles distincts : le jeu d'\textbf{apprentissage} ajuste les paramètres du modèle ; la \textbf{validation}, réalisée par validation croisée à l'intérieur du jeu d'entraînement, sert à choisir les hyperparamètres ; le jeu de \textbf{test} estime la performance finale et n'est utilisé qu'une seule fois.
+
+\section{Validation croisée et recherche d'hyperparamètres}\label{sec:cv}
+Les \textit{paramètres} d'un modèle (coefficients d'un hyperplan, seuils d'un arbre) sont appris à partir des données. Les \textit{hyperparamètres} ($K$, profondeur maximale, $C$, $\alpha$, etc.) sont fixés avant l'apprentissage et pilotent la complexité. Pour les choisir sans jamais toucher au jeu de test, on utilise la \textbf{validation croisée en $K$ plis} : le jeu d'entraînement est découpé en $K$ sous-ensembles de tailles voisines (les plis) ; chaque pli sert à tour de rôle de validation, tandis que les $K - 1$ autres servent à l'apprentissage ; le score final est la moyenne des $K$ scores obtenus :
+\begin{equation}\label{eq:cv}
+\mathrm{CV}(\theta) = \frac{1}{K}\sum_{k=1}^{K} \mathrm{score}\bigl(f_\theta^{(-k)},\, D_k\bigr)
+\end{equation}
+où $f_\theta^{(-k)}$ est le modèle d'hyperparamètres $\theta$ entraîné sans le pli $k$ et $D_k$ le pli de validation. Dans la variante \textbf{stratifiée}, chaque pli conserve la proportion des classes du jeu complet. Cette précaution est indispensable lorsque la classe minoritaire ne représente que 17,8\,\% des observations : sans elle, certains plis pourraient contenir très peu d'exemples de cette classe (Figure~\ref{fig:cv}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1.65cm,y=-0.62cm]
+\node[font=\sffamily\bfseries\small,text=navy] at (3.2,-0.5) {Jeu d'entraînement (80\,\% des avis) découpé en $K = 5$ plis stratifiés};
+\foreach \i in {1,...,5}{
+  \node[anchor=east,font=\sffamily\scriptsize] at (0.45,\i) {Itération \i};
+  \foreach \j in {1,...,5}{
+    \ifnum\i=\j
+      \node[fill=rose,text=white,minimum width=1.5cm,minimum height=0.46cm,inner sep=0pt,font=\sffamily\tiny] at (\j,\i) {valid.};
+    \else
+      \node[fill=azur,text=white,minimum width=1.5cm,minimum height=0.46cm,inner sep=0pt,font=\sffamily\tiny] at (\j,\i) {train};
+    \fi}}
+\node[fill=ardoise!18,text=ardoise,minimum width=7.6cm,minimum height=0.5cm,font=\sffamily\scriptsize] at (3.2,6.9) {Jeu de test (20\,\%) : jamais utilisé pendant la recherche};
+\end{tikzpicture}
+\caption{Validation croisée stratifiée à $K = 5$ plis à l'intérieur du jeu d'entraînement ; le jeu de test reste à l'écart.}\label{fig:cv}
+\end{figure}
+
+\code{GridSearchCV} automatise cette démarche. Pour chaque combinaison d'hyperparamètres d'une grille, il réalise $K$ apprentissages, calcule le score moyen de validation, retient la meilleure combinaison, puis ré-entraîne le modèle sur l'ensemble du jeu d'entraînement (étape de \textit{refit}). Le coût est proportionnel à la taille de la grille multipliée par $K$ : une grille de $4 \times 3 = 12$ combinaisons avec $K = 5$ plis représente $12 \times 5 + 1 = 61$ apprentissages. Le critère de sélection est fixé par le paramètre \code{scoring} (accuracy par défaut ; F1-score ou ROC-AUC sont des alternatives courantes). \code{RandomizedSearchCV} tire au hasard un nombre fixé de combinaisons et convient mieux aux grilles très grandes. Le cahier des charges impose $K \geq 5$ et l'une de ces deux méthodes pour tous les modèles réglables.
+
+\begin{calloutwarn}{Règle d'or}
+Le jeu de test n'intervient ni dans le choix des hyperparamètres, ni dans le prétraitement. Il est utilisé une seule fois, à la fin, pour la comparaison finale des modèles.
+\end{calloutwarn}
+
+\section{Données déséquilibrées}
+Un jeu de données est \textbf{déséquilibré} lorsque les classes ne sont pas représentées à parts égales. Ici, la classe 1 (\gl{recommandé}) représente 82,2\,\% des avis et la classe 0 (\gl{non recommandé}) 17,8\,\%, soit un rapport d'environ 4,6 contre 1. Cela a trois conséquences.
+\begin{enumerate}
+\item \textbf{L'accuracy est trompeuse.} Un classifieur qui prédit toujours la classe majoritaire (Zero-R) atteint déjà une accuracy égale à la proportion de cette classe, soit 82,23\,\% sur le jeu de test du projet.
+\item \textbf{Les algorithmes tendent à favoriser la classe majoritaire.} Minimiser l'erreur globale peut se faire au détriment du rappel de la classe minoritaire.
+\item \textbf{Les découpages doivent être stratifiés} pour que chaque sous-ensemble conserve les mêmes proportions.
+\end{enumerate}
+
+\begin{ltab}{B{0.24}L{0.46}L{0.30}}{Stratégies face au déséquilibre de classes}{tab:desequilibre}{\hc{Stratégie}&\hc{Principe}&\hc{Statut dans le projet}}
+Découpages stratifiés & Conserver les proportions de classes dans chaque sous-ensemble & Utilisée (split train/test et validation croisée)\\
+Métriques adaptées & F1-score, ROC-AUC et rappel par classe plutôt que l'accuracy seule & Utilisée (chapitre~\ref{chap:resultats})\\
+Pondération des classes & Pénaliser davantage les erreurs sur la classe minoritaire (\code{class_weight}) & Perspective (chapitre~\ref{chap:discussion})\\
+Ré-échantillonnage & Sous-échantillonner la classe majoritaire ou sur-échantillonner la minoritaire (SMOTE, Chawla et al., 2002) & Perspective\\
+Réglage du seuil & Déplacer le seuil de décision pour privilégier le rappel de la classe 0 & Perspective\\
+\end{ltab}
+
+Notons que SMOTE fabrique des exemples synthétiques par interpolation entre voisins ; appliqué à des matrices TF-IDF creuses de plus de dix mille colonnes, il produit des vecteurs qui ne correspondent à aucun texte réel, ce qui limite son intérêt dans ce projet.
+
+\section{Métriques d'évaluation}\label{sec:metriques}
+La \textbf{matrice de confusion} croise les classes réelles et les classes prédites (Figure~\ref{fig:conf}). Par convention, la classe positive est ici la classe 1 (\gl{recommandé}) : $\VP$ désigne les vrais positifs, $\VN$ les vrais négatifs, $\FP$ les faux positifs (avis non recommandé prédit recommandé) et $\FN$ les faux négatifs (avis recommandé prédit non recommandé).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[cel/.style={minimum width=2.7cm,minimum height=1.9cm,text=white,font=\sffamily\bfseries\small,align=center,inner sep=2pt}]
+\node[cel,fill=azur] at (0,0) {VP\\vrais positifs};
+\node[cel,fill=rose] at (2.8,0) {FN\\faux négatifs};
+\node[cel,fill=rose] at (0,-2.0) {FP\\faux positifs};
+\node[cel,fill=azur] at (2.8,-2.0) {VN\\vrais négatifs};
+\node[font=\sffamily\tiny,align=center,anchor=south] at (0,1.0) {Prédit : 1\\(recommandé)};
+\node[font=\sffamily\tiny,align=center,anchor=south] at (2.8,1.0) {Prédit : 0\\(non recommandé)};
+\node[font=\sffamily\tiny,anchor=east] at (-1.5,0) {Réel : 1};
+\node[font=\sffamily\tiny,anchor=east] at (-1.5,-2.0) {Réel : 0};
+\end{tikzpicture}
+\caption{Matrice de confusion d'un classifieur binaire (classe positive : \gl{recommandé}).}\label{fig:conf}
+\end{figure}
+
+Les métriques usuelles se déduisent de ces quatre effectifs.
+\begin{align}
+\mathrm{Accuracy} &= \frac{\VP + \VN}{\VP + \VN + \FP + \FN} \label{eq:acc}\\[2pt]
+\text{Précision} &= \frac{\VP}{\VP + \FP} \qquad\qquad \text{Rappel} = \frac{\VP}{\VP + \FN} \label{eq:pr}\\[2pt]
+\text{Spécificité} &= \frac{\VN}{\VN + \FP} \label{eq:spec}\\[2pt]
+F_1 &= 2\cdot\frac{\text{Précision}\cdot\text{Rappel}}{\text{Précision}+\text{Rappel}} = \frac{2\,\VP}{2\,\VP + \FP + \FN} \label{eq:f1}
+\end{align}
+La \textbf{précision} répond à la question \gl{quand le modèle annonce “recommandé”, a-t-il raison ?} ; le \textbf{rappel} (ou sensibilité) à \gl{quelle part des avis réellement recommandés est retrouvée ?} ; la \textbf{spécificité} est le rappel de la classe 0. Le \textbf{F1-score} est la moyenne harmonique de la précision et du rappel : plus sévère que la moyenne arithmétique, elle reste basse dès que l'une des deux composantes est faible.
+
+\begin{calloutpink}{Un F1 flatteur lorsque la classe positive est majoritaire}
+Le baseline Zero-R ne détecte aucun avis non recommandé, mais obtient pourtant un F1 de 0,9025 : sa précision vaut $p$ (la proportion de la classe 1) et son rappel vaut 1, donc $F_1 = 2p/(1 + p) = 2 \times 0{,}8223 / 1{,}8223 \approx 0{,}9025$. Le F1 de la classe 1 est donc utile mais insuffisant ; il est complété par l'AUC et par le rappel de chaque classe.
+\end{calloutpink}
+
+Deux métriques agrégées corrigent en partie ce biais : l'\textbf{accuracy équilibrée}, moyenne des rappels des deux classes, et le \textbf{macro-F1}, moyenne des F1 calculés pour chaque classe.
+\begin{equation}\label{eq:bacc}
+\mathrm{Accuracy}_{\text{équilibrée}} = \frac{\text{Rappel} + \text{Spécificité}}{2}
+\end{equation}
+Enfin, un classifieur produit en général un \textit{score} $s(x)$ (probabilité, distance à l'hyperplan, etc.) ; la prédiction \gl{classe 1} correspond à $s(x) > \text{seuil}$. En faisant varier le seuil, on trace le taux de vrais positifs (rappel) en fonction du taux de faux positifs ($1 - \text{spécificité}$) : c'est la \textbf{courbe ROC} (Fawcett, 2006, Figure~\ref{fig:roc}). L'\textbf{aire sous la courbe} (AUC) mesure la capacité du score à classer correctement les avis :
+\begin{equation}\label{eq:auc}
+\mathrm{AUC} = P\bigl(s(x^{+}) > s(x^{-})\bigr) = \frac{U}{n_{+}\,n_{-}}
+\end{equation}
+C'est la probabilité qu'un avis positif tiré au hasard reçoive un score supérieur à celui d'un avis négatif tiré au hasard (0,5 pour le hasard, 1 pour un classement parfait). Elle ne dépend pas du seuil et est peu sensible au déséquilibre. Elle est égale à la statistique $U$ de Mann-Whitney normalisée par $n_{+}n_{-}$ (section~\ref{sec:mannwhitney}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.58\textwidth,height=0.58\textwidth,xmin=0,xmax=1,ymin=0,ymax=1.02,grid=major,grid style={gray!25},
+  xtick={0,0.2,...,1},ytick={0,0.2,...,1},xlabel={Taux de faux positifs (1 $-$ spécificité)},ylabel={Taux de vrais positifs (rappel)},
+  legend style={at={(0.97,0.03)},anchor=south east,draw=none,fill=white,fill opacity=0.85,text opacity=1,font=\sffamily\tiny,legend cell align=left}]
+\addplot[ardoise,dashed,thick] coordinates{(0,0)(1,1)};\addlegendentry{hasard (AUC = 0,5)}
+\addplot[orange!85!black,thick,domain=0:1,samples=120]{x^0.4286};\addlegendentry{modèle médiocre (AUC $\approx$ 0,7)}
+\addplot[azur,thick,domain=0:1,samples=120]{x^0.1111};\addlegendentry{bon modèle (AUC $\approx$ 0,9)}
+\addplot[rose,thick] coordinates{(0,0)(0,1)(1,1)};\addlegendentry{modèle parfait (AUC = 1)}
+\end{axis}
+\end{tikzpicture}
+\caption{Courbes ROC schématiques : plus la courbe épouse le coin supérieur gauche, plus l'AUC est élevée (valeurs illustratives).}\label{fig:roc}
+\end{figure}
+
+\begin{ltab}{B{0.30}L{0.54}C{0.16}}{Synthèse des métriques et valeurs obtenues par le baseline Zero-R}{tab:metriques}{\hc{Métrique}&\hc{Question à laquelle elle répond}&\hc{\centering Zero-R}}
+Accuracy & Quelle part des avis est bien classée ? & 0,8223\\
+Précision (classe 1) & Quand le modèle annonce \gl{recommandé}, a-t-il raison ? & 0,8223\\
+Rappel (classe 1) & Quelle part des avis recommandés est retrouvée ? & 1,0000\\
+Spécificité (rappel classe 0) & Quelle part des avis non recommandés est détectée ? & 0,0000\\
+F1-score (classe 1) & Quel compromis entre précision et rappel pour la classe 1 ? & 0,9025\\
+Accuracy équilibrée & Quelle est la moyenne des rappels des deux classes ? & 0,5000\\
+ROC-AUC & Le score classe-t-il bien les avis, quel que soit le seuil ? & 0,5 (hasard)\\
+\end{ltab}
+% ============================== CHAPITRE 2 (2/2) =============================
+\section{Représentation du texte : sac de mots et TF-IDF}\label{sec:tfidf}
+Les algorithmes du cours opèrent sur des vecteurs numériques : il faut donc transformer le texte. La représentation par \textbf{sac de mots} (\textit{bag-of-words}) ignore l'ordre des mots et compte, pour chaque document, les occurrences de chaque terme d'un vocabulaire. Elle comporte quatre étapes : la \textit{tokenisation} (découpage en mots), la \textit{normalisation} (passage en minuscules, éventuellement suppression des mots vides), la construction du \textit{vocabulaire} $V$ sur le jeu d'entraînement, puis celle de la \textit{matrice document-terme}.
+
+Compter les mots favorise les termes très fréquents mais peu informatifs (\gl{the}, \gl{and}, \gl{it}). La pondération \textbf{TF-IDF} (Salton et Buckley, 1988) corrige cet effet : elle multiplie la fréquence du terme dans le document (tf) par un facteur qui décroît avec le nombre de documents contenant ce terme (idf). Dans la version \gl{lissée} de scikit-learn, utilisée par défaut par \code{TfidfVectorizer}, on a :
+\begin{equation}\label{eq:idf}
+\mathrm{idf}(t) = \ln\frac{1+n}{1+\mathrm{df}(t)} + 1 \qquad\qquad \mathrm{tfidf}(t,d) = \mathrm{tf}(t,d)\times\mathrm{idf}(t)
+\end{equation}
+où $n$ est le nombre de documents du corpus d'apprentissage et $\mathrm{df}(t)$ le nombre de documents qui contiennent $t$. Chaque vecteur est ensuite normalisé en norme L2, ce qui rend comparables des avis courts et des avis longs :
+\begin{equation}\label{eq:l2}
+\mathbf{v}_d \leftarrow \frac{\mathbf{v}_d}{\lVert \mathbf{v}_d \rVert_2}
+\end{equation}
+\textbf{Exemple fictif.} Considérons un corpus de trois avis : (1) \gl{love this dress love the fit}, (2) \gl{poor fit and poor quality} et (3) \gl{love the quality}. Avec $n = 3$, le terme \gl{love} apparaît dans 2 documents : idf $= \ln(4/3) + 1 = 1{,}2877$. Le terme \gl{poor}, présent dans un seul document, a un idf plus élevé ($\ln(4/2) + 1 = 1{,}6931$), car il est plus discriminant (Tableau~\ref{tab:tfidf}).
+
+\begin{ltab}{L{0.22}C{0.12}C{0.16}C{0.16}C{0.17}C{0.17}}{Fréquences et idf du corpus fictif de trois avis ($n = 3$)}{tab:tfidf}{\hc{Terme}&\hc{df}&\hc{idf}&\hc{tf avis 1}&\hc{tf avis 2}&\hc{tf avis 3}}
+\code{and} & 1 & 1,6931 & 0 & 1 & 0\\
+\code{dress} & 1 & 1,6931 & 1 & 0 & 0\\
+\code{fit} & 2 & 1,2877 & 1 & 1 & 0\\
+\code{love} & 2 & 1,2877 & 2 & 0 & 1\\
+\code{poor} & 1 & 1,6931 & 0 & 2 & 0\\
+\code{quality} & 2 & 1,2877 & 0 & 1 & 1\\
+\code{the} & 2 & 1,2877 & 1 & 0 & 1\\
+\code{this} & 1 & 1,6931 & 1 & 0 & 0\\
+\end{ltab}
+
+Pour l'avis 1, le poids brut de \gl{love} est tf $\times$ idf $= 2 \times 1{,}2877 = 2{,}5754$. La norme du vecteur brut de cet avis vaut 3,9601 ; le poids final est donc $2{,}5754 / 3{,}9601 =$ \textbf{0,650}, valeur que l'on retrouve dans la Figure~\ref{fig:tfidf}. Dans l'avis 3, les trois termes ont le même idf : leurs poids finaux sont égaux ($1/\sqrt{3} \approx 0{,}577$).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1.3cm,y=-0.95cm]
+\foreach \c/\n in {0/and,1/dress,2/fit,3/love,4/poor,5/quality,6/the,7/this}{\node[font=\ttfamily\scriptsize,text=ardoise] at (\c,-0.78) {\n};}
+\foreach \r/\l in {0/avis 1,1/avis 2,2/avis 3}{
+  \node[anchor=east,font=\sffamily\scriptsize,text=ardoise] at (-0.6,\r) {\l};
+  \foreach \c in {0,...,7}{\node[fill=azur!5,minimum width=1.27cm,minimum height=0.93cm,inner sep=0pt,font=\sffamily\scriptsize,text=ardoise!60] at (\c,\r) {$\cdot$};}}
+\foreach \r/\c/\v/\t in {0/1/0.428/0{,}428, 0/2/0.325/0{,}325, 0/3/0.650/0{,}650, 0/6/0.325/0{,}325, 0/7/0.428/0{,}428,
+    1/0/0.403/0{,}403, 1/2/0.307/0{,}307, 1/4/0.806/0{,}806, 1/5/0.307/0{,}307, 2/3/0.577/0{,}577, 2/5/0.577/0{,}577, 2/6/0.577/0{,}577}{
+  \pgfmathsetmacro{\pcol}{\v*100}
+  \ifdim\v pt>0.55pt \def\tc{white}\else\def\tc{black}\fi
+  \node[fill=azur!\pcol!white,text=\tc,minimum width=1.27cm,minimum height=0.93cm,inner sep=0pt,font=\sffamily\scriptsize] at (\c,\r) {\t};}
+\end{tikzpicture}
+\caption{Matrice TF-IDF normalisée du corpus fictif (les points indiquent des valeurs nulles).}\label{fig:tfidf}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Matrice creuse.} Un avis ne contient que quelques dizaines de termes distincts, alors que le vocabulaire en compte plusieurs milliers : la quasi-totalité des cases vaut zéro. On ne stocke que les valeurs non nulles (format CSR de \code{scipy.sparse}), ce qui réduit fortement la mémoire et le temps de calcul.
+\item \textbf{Vocabulaire appris sur l'entraînement.} Les mots présents uniquement dans le jeu de test sont ignorés ; c'est une condition pour éviter la fuite de données (section~\ref{sec:leakage}).
+\item \textbf{Limites.} Le sac de mots perd l'ordre des mots, donc la négation (\gl{not good} contre \gl{good}), l'ironie et la polysémie. Les \textit{n-grammes} (suites de $n$ mots consécutifs) atténuent en partie ce défaut.
+\end{itemize}
+
+\section{Préparation des variables numériques et catégorielles}
+\textbf{Imputation.} Une valeur manquante peut être remplacée par une statistique apprise sur l'entraînement : la \textit{médiane} pour une variable numérique (robuste aux valeurs extrêmes, contrairement à la moyenne) ou la valeur \textit{la plus fréquente} pour une variable catégorielle. Une alternative consiste à créer une modalité explicite \gl{Unknown}, qui conserve l'information que la valeur était absente.
+
+\textbf{Standardisation (Z-score).} Elle recentre et réduit chaque variable numérique :
+\begin{equation}\label{eq:zscore}
+z = \frac{x - \mu}{\sigma}
+\end{equation}
+où $\mu$ et $\sigma$ sont la moyenne et l'écart-type calculés sur l'entraînement. Pour les valeurs fictives $\{25, 34, 41, 52, 60\}$, on obtient $\mu = 42{,}4$ et $\sigma = 12{,}47$, d'où les scores $z = \{-1{,}40;\ -0{,}67;\ -0{,}11;\ 0{,}77;\ 1{,}41\}$. Les algorithmes fondés sur des distances (K-NN) ou sur une marge (SVM) y sont sensibles : sans standardisation, une variable exprimée en dizaines (l'âge) écraserait une variable bornée entre 1 et 5 (la note). Les arbres et les forêts, invariants par transformation monotone, n'en ont pas besoin.
+
+\textbf{Encodage one-hot.} Une variable catégorielle à $m$ modalités est remplacée par $m$ colonnes binaires, dont une seule vaut 1 pour chaque individu. Par exemple, \code{Department Name} (6 modalités) donne 6 colonnes. Contrairement à un codage entier (0, 1, 2\ldots), cet encodage n'impose aucun ordre artificiel entre les modalités ; son coût est l'augmentation du nombre de colonnes. Une modalité absente de l'entraînement doit être gérée au moment du test (ignorée, \ie{} codée par un vecteur nul).
+
+\begin{ltab}{B{0.20}L{0.20}L{0.22}L{0.38}}{Sensibilité des algorithmes à l'échelle et aux matrices creuses}{tab:echelle}{\hc{Algorithme}&\hc{Sensible à l'échelle ?}&\hc{Accepte les matrices creuses ?}&\hc{Remarque}}
+K-NN & Oui (distances) & Oui & Standardisation indispensable pour les variables numériques\\
+Linear SVC & Oui (marge) & Oui & Solveur adapté aux données creuses de grande dimension\\
+Decision Tree & Non & Oui & Invariant aux transformations monotones\\
+Random Forest & Non & Oui & Idem ; moyenne de nombreux arbres\\
+Multinomial NB & Non & Oui & Exige des valeurs d'entrée positives (comptages, poids TF-IDF)\\
+\end{ltab}
+
+\section{Fuite de données (\textit{data leakage})}\label{sec:leakage}
+Il y a \textbf{fuite de données} lorsque des informations issues du jeu de test (ou de la cible) influencent l'apprentissage ou le prétraitement. Les performances mesurées sont alors artificiellement optimistes et ne se reproduiront pas en production. Le Tableau~\ref{tab:fuite} recense les situations les plus fréquentes.
+
+\begin{ltab}{L{0.32}L{0.32}L{0.36}}{Sources courantes de fuite de données et bonnes pratiques}{tab:fuite}{\hc{Mauvaise pratique}&\hc{Conséquence}&\hc{Bonne pratique}}
+Standardiser tout le jeu de données avant le découpage & La moyenne et l'écart-type intègrent des informations du test & Ajuster le scaler sur l'entraînement uniquement, puis transformer le test\\
+Construire le vocabulaire et les idf sur tous les avis & Les mots rares du test influencent les poids & \code{fit} sur l'entraînement, \code{transform} sur le test\\
+Choisir les hyperparamètres avec le jeu de test & Le test devient un jeu de validation : estimation biaisée & Validation croisée à l'intérieur de l'entraînement\\
+Laisser des doublons entre entraînement et test & Le modèle est évalué sur des exemples déjà vus & Supprimer les doublons avant le découpage\\
+Utiliser une variable dérivée de la cible ou connue après coup & Le modèle \gl{triche} & Vérifier que chaque variable est disponible au moment de la prédiction\\
+\end{ltab}
+
+Dans ce projet, toutes les transformations sont ajustées (\code{fit}) uniquement sur le jeu d'entraînement ; le jeu de test est ensuite seulement transformé (\code{transform}). La mise en œuvre est décrite au chapitre~\ref{chap:prep}.
+
+\section{Tests statistiques et analyses exploratoires}
+\subsection{Principe des tests d'hypothèses}
+Un test d'hypothèses oppose une \textbf{hypothèse nulle} $H_0$ (absence d'effet, d'association ou de différence) à une \textbf{hypothèse alternative} $H_1$. On calcule une statistique de test dont la loi sous $H_0$ est connue, puis une \textbf{p-valeur} : la probabilité d'observer un résultat au moins aussi extrême si $H_0$ était vraie. Si $p < \alpha$, où le seuil $\alpha$ est fixé a priori (ici $\alpha = 0{,}05$), on rejette $H_0$. Deux erreurs sont possibles : l'erreur de type I (rejeter $H_0$ à tort, de probabilité $\alpha$) et l'erreur de type II (ne pas rejeter $H_0$ à tort).
+
+Avec plusieurs dizaines de milliers d'observations, la puissance des tests est telle que des écarts minimes deviennent \gl{significatifs}. La p-valeur doit donc toujours être accompagnée d'une mesure de la \textbf{taille d'effet} (V de Cramér pour le $\chi^2$, probabilité de supériorité pour Mann-Whitney).
+
+\begin{ltab}{L{0.34}L{0.20}L{0.46}}{Choix d'un test selon la nature des variables}{tab:choixtest}{\hc{Situation}&\hc{Test retenu}&\hc{Alternative écartée et raison}}
+Comparer une variable ordinale ou non normale entre deux groupes indépendants & Mann-Whitney U & Test t de Student : suppose des données d'intervalle et approximativement normales ; la note de 1 à 5 est ordinale et discrète\\
+Mesurer l'association entre deux variables catégorielles & $\chi^2$ d'indépendance & Corrélation de Pearson : inadaptée aux variables nominales\\
+Comparer trois groupes ou plus & ANOVA ou Kruskal-Wallis & Non utilisé dans ce projet\\
+Mesurer une relation linéaire entre deux variables quantitatives & Corrélation de Pearson & Spearman si la relation est monotone ou si les variables sont ordinales\\
+\end{ltab}
+
+\subsection{Test de Mann-Whitney U}\label{sec:mannwhitney}
+Le test de Mann-Whitney (ou Wilcoxon-Mann-Whitney, Mann et Whitney, 1947) compare la position de deux distributions indépendantes sans supposer leur normalité. $H_0$ : les deux groupes proviennent de la même distribution ; $H_1$ : l'un des groupes a tendance à prendre des valeurs plus grandes. Il se fonde sur les \textit{rangs} : on fusionne les deux échantillons, on attribue à chaque observation son rang (rang moyen en cas d'égalités), puis on somme les rangs $R_1$ du premier groupe :
+\begin{equation}\label{eq:mw}
+U_1 = R_1 - \frac{n_1(n_1+1)}{2} \qquad\qquad U_2 = n_1 n_2 - U_1
+\end{equation}
+Pour de grands échantillons, $U$ suit approximativement une loi normale de moyenne $n_1 n_2/2$ ; la p-valeur s'obtient alors à partir de la statistique centrée réduite, avec une correction pour les égalités. Le rapport $U_1/(n_1 n_2)$ est la \textbf{probabilité de supériorité} : la probabilité qu'une observation du groupe 1 dépasse une observation du groupe 2 (les égalités comptant pour moitié). Il vaut 0,5 en l'absence de différence, et c'est exactement l'AUC d'un classifieur qui utiliserait la variable comme score (équation~\eqref{eq:auc}).
+
+\textbf{Exemple fictif.} Deux groupes de six notes : le groupe A (\gl{recommande}) et le groupe B (\gl{ne recommande pas}). Après fusion, les valeurs triées sont 1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5 ; les rangs moyens sont donc 1 pour la note 1, 2,5 pour la note 2, 5 pour la note 3, 8 pour la note 4 et 11 pour la note 5 (Tableau~\ref{tab:rangs}).
+
+\begin{ltab}{L{0.20}L{0.28}L{0.34}C{0.18}}{Exemple fictif de calcul des rangs pour le test de Mann-Whitney}{tab:rangs}{\hc{Groupe}&\hc{Notes observées}&\hc{Rangs correspondants}&\hc{Somme des rangs}}
+A ($n_1 = 6$) & 5, 4, 5, 3, 5, 4 & 11, 8, 11, 5, 11, 8 & 54\\
+B ($n_2 = 6$) & 2, 3, 1, 3, 4, 2 & 2,5, 5, 1, 5, 8, 2,5 & 24\\
+\end{ltab}
+
+On obtient $R_1 = 54$, d'où $U_1 = 54 - 6 \times 7 / 2 = 33$ et $U_2 = 36 - 33 = 3$. La probabilité de supériorité vaut $33 / 36 = 0{,}917$ ; la p-valeur (approximation normale, test bilatéral, calculée avec SciPy) est d'environ 0,017 : au seuil de 5\,\%, on rejetterait $H_0$ dans cet exemple.
+
+\subsection{Test du \texorpdfstring{$\chi^2$}{khi-deux} d'indépendance}
+Le test du $\chi^2$ (Pearson, 1900) évalue l'association entre deux variables catégorielles à partir de leur tableau de contingence à $r$ lignes et $c$ colonnes. $H_0$ : les deux variables sont indépendantes. Sous $H_0$, l'effectif attendu de la cellule $(i, j)$ est $E_{ij} = L_i C_j / N$ (total de la ligne $i$ fois total de la colonne $j$, divisé par l'effectif total). La statistique mesure l'écart entre effectifs observés $O_{ij}$ et attendus :
+\begin{equation}\label{eq:chi2}
+\chi^2 = \sum_{i=1}^{r}\sum_{j=1}^{c}\frac{(O_{ij}-E_{ij})^2}{E_{ij}} \qquad\qquad \mathrm{ddl} = (r-1)(c-1)
+\end{equation}
+Elle suit approximativement une loi du $\chi^2$ à $(r - 1)(c - 1)$ degrés de liberté ; l'approximation est valable si tous les effectifs attendus sont supérieurs ou égaux à 5 (sinon, on regroupe des modalités ou l'on recourt au test exact de Fisher). La taille d'effet est mesurée par le \textbf{V de Cramér} :
+\begin{equation}\label{eq:cramer}
+V = \sqrt{\frac{\chi^2}{N\,(\min(r,c)-1)}} \in [0,1]
+\end{equation}
+Pour un département à 6 modalités croisé avec une cible binaire, le nombre de degrés de liberté est $(6 - 1)(2 - 1) = 5$ (6 si la modalité \gl{Unknown} est conservée), et la valeur critique à $\alpha = 5\,\%$ est 11,07 (Figure~\ref{fig:chi2}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.74\textwidth,height=5.6cm,xmin=0,xmax=25,ymin=0,ymax=0.18,axis lines=left,xtick={0,5,10,15,20,25},ytick=\empty,
+  xlabel={Statistique $\chi^2$\quad (loi du $\chi^2$ à 5 degrés de liberté)},ylabel={Densité},clip=false]
+\addplot[draw=none,fill=rose!45,domain=11.07:25,samples=60]{x^1.5*exp(-x/2)/7.5199}\closedcycle;
+\addplot[navy,thick,domain=0:25,samples=100]{x^1.5*exp(-x/2)/7.5199};
+\draw[rose,dashed] (axis cs:11.07,0) -- (axis cs:11.07,0.17);
+\node[font=\sffamily\tiny,text=rose!70!black,align=left,anchor=west] at (axis cs:11.5,0.15) {valeur critique\\11,07 ($\alpha = 5\,\%$)};
+\node[font=\sffamily\tiny,text=rose!70!black,align=center] at (axis cs:17.5,0.03) {zone de rejet\\de $H_0$};
+\end{axis}
+\end{tikzpicture}
+\caption{Loi du $\chi^2$ à 5 degrés de liberté : la zone colorée est la région de rejet de $H_0$ au seuil de 5\,\%.}\label{fig:chi2}
+\end{figure}
+
+\textbf{Exemple fictif.} Trois départements A, B et C, avec 300 avis au total (Tableau~\ref{tab:contingence}).
+
+\begin{ltab}{L{0.16}C{0.21}C{0.23}C{0.20}C{0.20}}{Exemple fictif de tableau de contingence $3 \times 2$ (effectifs observés et attendus)}{tab:contingence}{\hc{Département}&\hc{Recommandé (observé)}&\hc{Non recommandé (observé)}&\hc{Recommandé (attendu)}&\hc{Non recommandé (attendu)}}
+A & 80 & 20 & 66,67 & 33,33\\
+B & 70 & 30 & 66,67 & 33,33\\
+C & 50 & 50 & 66,67 & 33,33\\
+\end{ltab}
+
+La statistique vaut $\chi^2 = 21{,}0$ avec 2 degrés de liberté, soit une p-valeur d'environ $2{,}8 \times 10^{-5}$ ; le V de Cramér est 0,26 (association modérée). On rejette donc $H_0$ : dans cet exemple, la recommandation dépend du département.
+
+\subsection{Corrélation de Pearson}\label{sec:pearson}
+Le coefficient de corrélation linéaire de Pearson entre deux variables quantitatives $x$ et $y$ se calcule ainsi :
+\begin{equation}\label{eq:pearson}
+r = \frac{\sum_i (x_i-\bar{x})(y_i-\bar{y})}{\sqrt{\sum_i (x_i-\bar{x})^2}\,\sqrt{\sum_i (y_i-\bar{y})^2}} \in [-1,1]
+\end{equation}
+Une valeur proche de $\pm 1$ indique une forte relation linéaire, une valeur proche de 0 l'absence de relation \textit{linéaire} (une relation non linéaire peut subsister). Le coefficient est sensible aux valeurs extrêmes. Pour des variables ordinales (la note) ou monotones, on préfère le coefficient de Spearman, qui est le coefficient de Pearson des rangs. Lorsque l'une des variables est binaire (la cible), le coefficient de Pearson devient la corrélation point-bisérial. Une matrice de corrélation permet aussi de repérer les variables redondantes.
+
+\subsection{Règle de Tukey pour les valeurs atypiques}\label{sec:tukey}
+La règle de Tukey (1977) repose sur l'écart interquartile $\mathrm{IQR} = Q_3 - Q_1$. Une observation est jugée atypique si elle sort de l'intervalle :
+\begin{equation}\label{eq:tukey}
+[\,Q_1 - 1{,}5\,\mathrm{IQR}\ ;\ Q_3 + 1{,}5\,\mathrm{IQR}\,]
+\end{equation}
+Les quartiles étant des statistiques d'ordre, la règle est robuste et ne suppose aucune loi particulière. \textbf{Exemple fictif} : pour les dix âges $\{22, 25, 27, 30, 31, 33, 35, 38, 41, 99\}$, on a $Q_1 = 27{,}75$, $Q_3 = 37{,}25$, $\mathrm{IQR} = 9{,}5$, d'où les limites 13,5 et 51,5 ; seul l'âge 99 sort de l'intervalle (Figure~\ref{fig:tukey}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.86\textwidth,height=3.7cm,xmin=10,xmax=106,ymin=-1.1,ymax=1.4,axis x line=bottom,axis y line=none,
+  xtick={20,40,60,80,100},xlabel={Âge (données fictives)},clip=false]
+\draw[rose,dashed] (axis cs:13.5,-1.0) -- (axis cs:13.5,1.25);
+\draw[rose,dashed] (axis cs:51.5,-1.0) -- (axis cs:51.5,1.25);
+\draw[azur,thick,fill=azur!10] (axis cs:27.75,-0.38) rectangle (axis cs:37.25,0.38);
+\draw[azur,thick] (axis cs:32,-0.38) -- (axis cs:32,0.38);
+\draw[azur,thick] (axis cs:22,0) -- (axis cs:27.75,0);
+\draw[azur,thick] (axis cs:37.25,0) -- (axis cs:41,0);
+\draw[azur,thick] (axis cs:22,-0.16) -- (axis cs:22,0.16);
+\draw[azur,thick] (axis cs:41,-0.16) -- (axis cs:41,0.16);
+\addplot[only marks,mark=*,mark size=1.3pt,ardoise!70] coordinates{(22,0)(25,0)(27,0)(30,0)(31,0)(33,0)(35,0)(38,0)(41,0)};
+\addplot[only marks,mark=*,mark size=2pt,rose] coordinates{(99,0)};
+\node[font=\sffamily\tiny,text=navy,anchor=south east] at (axis cs:27.75,0.62) {$Q_1 = 27{,}75$};
+\node[font=\sffamily\tiny,text=navy,anchor=south west] at (axis cs:37.25,0.62) {$Q_3 = 37{,}25$};
+\node[font=\sffamily\tiny,text=rose!70!black,anchor=west] at (axis cs:52.5,-0.55) {limite haute $= Q_3 + 1{,}5\times\mathrm{IQR} = 51{,}5$};
+\node[font=\sffamily\tiny,text=rose!70!black,anchor=west] at (axis cs:14.5,-0.85) {limite basse $= Q_1 - 1{,}5\times\mathrm{IQR} = 13{,}5$};
+\node[font=\sffamily\tiny,text=rose!70!black,anchor=south east] at (axis cs:103,0.3) {99 : valeur atypique};
+\end{axis}
+\end{tikzpicture}
+\caption{Diagramme en boîte et limites de Tukey sur dix âges fictifs : la valeur 99 est atypique.}\label{fig:tukey}
+\end{figure}
+
+Une valeur atypique n'est pas forcément une erreur : il faut juger de sa plausibilité avant de la supprimer, de la remplacer (winsorisation) ou de la conserver.
+% ============================== CHAPITRE 3 ===================================
+\chapter{Présentation du jeu de données}\label{chap:donnees}
+
+\section{Source, licence et contexte}
+Le jeu de données \textit{Women's E-Commerce Clothing Reviews} est publié sur la plateforme Kaggle par Nick Brooks (Brooks, 2018). Il rassemble des avis réels de clientes sur des vêtements pour femmes, déposés sur le site d'un détaillant de mode en ligne. Chaque ligne correspond à \textbf{un avis} : une cliente, un produit, une note, un titre, un texte et quelques informations de catalogue.
+
+S'agissant de données commerciales réelles, elles ont été \textbf{anonymisées} : les références au détaillant dans le titre et le texte des avis ont été remplacées par le mot \gl{retailer}. Le jeu est diffusé sous une licence de type domaine public (Creative Commons) et il est largement utilisé pour l'analyse de sentiments et la classification de texte, ce qui facilite la comparaison avec d'autres travaux. Les avis sont rédigés en \textbf{anglais}.
+
+\section{Dimensions et conformité à la volumétrie exigée}
+Le fichier brut \code{data/raw/reviews.csv} compte \textbf{23\,486 lignes} et \textbf{11 colonnes}. Dix d'entre elles sont de vrais attributs ; la onzième est, dans le fichier Kaggle d'origine, une colonne d'index sans nom (\code{Unnamed: 0}) créée lors d'un export, sans signification pour le problème, et qui n'est pas utilisée comme variable explicative. Le jeu satisfait les seuils du cahier des charges (Tableau~\ref{tab:volumetrie}), et sa taille de quelques mégaoctets reste très inférieure à la limite de 100 Mo au-delà de laquelle un stockage externe serait nécessaire : le fichier est donc conservé dans le dépôt, dans \code{data/raw/}.
+
+\begin{ltab}{B{0.22}L{0.28}L{0.24}L{0.26}}{Conformité du jeu de données aux exigences de volumétrie}{tab:volumetrie}{\hc{Critère}&\hc{Exigence du cahier des charges}&\hc{Jeu de données}&\hc{Verdict}}
+Enregistrements bruts & $\geq$ 10\,000 & 23\,486 & Conforme\\
+Attributs & $\geq$ 10 & 10 (hors colonne d'index) & Conforme\\
+Taille du fichier & Stockage externe si $>$ 100 Mo & Quelques Mo & Stockage dans le dépôt\\
+\end{ltab}
+
+\section{Dictionnaire des variables}\label{sec:dico}
+Le Tableau~\ref{tab:dico} décrit chaque colonne : son type statistique, sa signification, le nombre de valeurs distinctes du jeu brut (d'après les métadonnées publiques du jeu de données sur OpenML) et son traitement dans le pipeline. Le type statistique conditionne tout le reste : les statistiques descriptives pertinentes, les tests applicables, l'encodage et le choix des visualisations.
+
+\begin{ltab}[\footnotesize]{B{0.16}L{0.14}L{0.31}C{0.12}L{0.27}}{Dictionnaire des variables du jeu de données brut}{tab:dico}{\hc{Variable}&\hc{Type}&\hc{Description}&\hc{Valeurs distinctes}&\hc{Traitement dans le pipeline}}
+Clothing ID & Identifiant & Identifiant du produit évalué & 1\,206 & Retirée avant la modélisation (section~\ref{sec:clothingid})\\
+Age & Quantitative (discrète) & Âge de la cliente (de 18 à 99 ans) & 77 & Imputation par la médiane, standardisation\\
+Title & Textuelle & Titre de l'avis & 13\,992 & TF-IDF (vectoriseur dédié)\\
+Review Text & Textuelle & Corps de l'avis & 22\,634 & TF-IDF (vectoriseur dédié)\\
+Rating & Ordinale (1 à 5) & Note donnée au produit & 5 & Imputation par la médiane, standardisation\\
+Recommended IND & Binaire (cible) & 1 : la cliente recommande ; 0 : elle ne recommande pas & 2 & Cible $y$ (non transformée)\\
+Positive Feedback Count & Quantitative (discrète) & Nombre d'autres clientes ayant jugé l'avis utile (de 0 à 122) & 82 & Imputation par la médiane, standardisation\\
+Division Name & Catégorielle & Division du produit (General, General Petite, Initmates\textsuperscript{*}) & 3 & Imputation (plus fréquent), one-hot\\
+Department Name & Catégorielle & Département (Bottoms, Dresses, Intimate, Jackets, Tops, Trend) & 6 & Imputation (plus fréquent), one-hot\\
+Class Name & Catégorielle & Sous-catégorie du produit (Dresses, Knits, Blouses, Jeans, etc.) & 20 & Imputation (plus fréquent), one-hot\\
+\end{ltab}
+{\small\textsuperscript{*} \gl{Initmates} est l'orthographe d'origine de la modalité dans le jeu de données ; elle est conservée telle quelle.\par}
+
+\section{Qualité des données : valeurs manquantes et doublons}\label{sec:qualite}
+Le diagnostic de qualité du jeu brut montre que seules cinq colonnes comportent des valeurs manquantes (Figure~\ref{fig:manquants} et Tableau~\ref{tab:manquants}).
+
+\begin{ltab}{B{0.26}C{0.16}C{0.16}L{0.42}}{Valeurs manquantes du jeu brut (23\,486 avis), d'après les métadonnées publiques OpenML}{tab:manquants}{\hc{Variable}&\hc{Valeurs manquantes}&\hc{Part du jeu brut}&\hc{Interprétation}}
+Title & 3\,810 & 16,22\,\% & Titre facultatif non renseigné par la cliente\\
+Review Text & 845 & 3,60\,\% & Avis sans commentaire (note seule)\\
+Division Name & 14 & 0,06\,\% & Produit sans division\\
+Department Name & 14 & 0,06\,\% & Produit sans département\\
+Class Name & 14 & 0,06\,\% & Produit sans sous-catégorie\\
+Les cinq autres colonnes & 0 & 0\,\% & Clothing ID, Age, Rating, Recommended IND, Positive Feedback Count\\
+\end{ltab}
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[xbar,width=0.9\textwidth,height=7.2cm,bar width=7pt,xmin=0,xmax=5400,
+  symbolic y coords={Clothing ID,Age,Rating,Recommended IND,Positive Feedback Count,Division Name,Department Name,Class Name,Review Text,Title},
+  ytick=data,y tick label style={font=\sffamily\tiny},enlarge y limits=0.06,
+  xlabel={Nombre de valeurs manquantes (sur 23\,486 avis)},xtick={0,1000,2000,3000,4000,5000},scaled x ticks=false,
+  nodes near coords,nodes near coords align={horizontal},point meta=explicit symbolic,
+  every node near coord/.append style={font=\sffamily\tiny,text=ardoise},axis x line*=bottom,axis y line*=left]
+\addplot[fill=rose,draw=none] coordinates{(0,Clothing ID)[0] (0,Age)[0] (0,Rating)[0] (0,Recommended IND)[0] (0,Positive Feedback Count)[0]
+  (14,Division Name)[14 (0,06 \%)] (14,Department Name)[14 (0,06 \%)] (14,Class Name)[14 (0,06 \%)] (845,Review Text)[845 (3,6 \%)] (3810,Title)[3\,810 (16,2 \%)]};
+\end{axis}
+\end{tikzpicture}
+\caption{Nombre de valeurs manquantes par colonne dans le jeu brut (source : métadonnées OpenML du jeu de données).}\label{fig:manquants}
+\end{figure}
+
+Trois enseignements s'en dégagent.
+\begin{itemize}
+\item \textbf{La cible est complète.} \code{Recommended IND} n'a aucune valeur manquante : aucune ligne n'est perdue faute d'étiquette, et la règle \gl{supprimer les lignes à cible manquante} du nettoyage est ici une simple précaution.
+\item \textbf{L'absence de titre ou de texte est une information, pas une erreur.} Une cliente peut laisser une note sans rédiger de commentaire. Traiter ces champs comme du texte vide (ou comme une modalité \gl{Unknown}) conserve ces avis, alors que les supprimer retirerait près de 16\,\% du jeu pour le seul titre.
+\item \textbf{Les trois colonnes de catégorie ont chacune 14 valeurs manquantes} (0,06\,\%). L'égalité des effectifs suggère des produits qui n'ont pas été rattachés au catalogue, mais seule une vérification sur les données (notebook 01) permettrait de confirmer que ce sont les mêmes lignes.
+\end{itemize}
+Pour les \textbf{doublons}, les décomptes publiés indiquent 22\,634 textes d'avis distincts pour 22\,641 avis qui possèdent un texte ($23\,486 - 845$). Les avis dupliqués sont donc très rares : sept au plus parmi les avis avec texte. Leur suppression avant le découpage train/test reste néanmoins nécessaire pour éviter qu'un même avis se retrouve à la fois dans l'entraînement et dans le test (section~\ref{sec:leakage}).
+
+\section{Variable cible et déséquilibre des classes}\label{sec:cible}
+La cible \code{Recommended IND} prend la valeur 1 pour 82,2\,\% des avis et 0 pour 17,8\,\%. Sur le jeu brut, cela correspond à environ 19\,300 avis recommandés contre environ 4\,200 non recommandés, soit un rapport d'environ 4,6 contre 1 (Figure~\ref{fig:cible}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar,width=0.62\textwidth,height=5.6cm,bar width=2.7cm,ymin=0,ymax=100,symbolic x coords={rec,non},xtick=data,
+  xticklabels={Recommandé\\(Recommended IND = 1),Non recommandé\\(Recommended IND = 0)},x tick label style={align=center,font=\sffamily\tiny},
+  ylabel={Part des avis (\%)},enlarge x limits=0.5,ytick={0,20,40,60,80,100},axis x line*=bottom,axis y line*=left]
+\addplot[fill=azur,draw=none,bar shift=0pt] coordinates{(rec,82.2)};
+\addplot[fill=rose,draw=none,bar shift=0pt] coordinates{(non,17.8)};
+\draw[navy!70,dashed] (rel axis cs:0,0.8223) -- (rel axis cs:1,0.8223);
+\node[font=\sffamily\tiny,text=navy,anchor=south east] at (rel axis cs:1,0.8223) {Zero-R : 82,23 \%};
+\node[font=\sffamily\bfseries\scriptsize] at (axis cs:rec,86.5) {82,2 \%};
+\node[font=\sffamily\bfseries\scriptsize] at (axis cs:non,22) {17,8 \%};
+\end{axis}
+\end{tikzpicture}
+\caption{Répartition de la variable cible ; la ligne pointillée indique l'accuracy du baseline Zero-R sur le jeu de test.}\label{fig:cible}
+\end{figure}
+
+Ce déséquilibre conditionne la suite du projet. Un modèle qui prédirait systématiquement \gl{recommandé} obtiendrait déjà 82,23\,\% d'accuracy sur le jeu de test : toute amélioration doit être mesurée par rapport à ce plancher, et non par rapport à 50\,\%. Il justifie le recours à un découpage stratifié (chapitre~\ref{chap:prep}) et le choix du F1-score et de la ROC-AUC comme métriques principales (chapitre~\ref{chap:resultats}).
+
+\section{Considérations éthiques et limites des données}\label{sec:ethique}
+\begin{itemize}
+\item \textbf{Anonymat.} Le jeu ne contient aucun identifiant de cliente ; la seule caractéristique personnelle est l'âge. Le nom du détaillant a été masqué dans les textes.
+\item \textbf{Représentativité.} Les avis proviennent d'un seul détaillant et sont rédigés en anglais. Un modèle entraîné sur ces données ne se généralise pas sans précaution à d'autres langues, d'autres enseignes ou d'autres catégories de produits.
+\item \textbf{Équité.} L'âge figure parmi les variables explicatives. Une étude d'équité (performances par tranche d'âge) serait nécessaire avant tout usage réel ; elle fait partie des perspectives (chapitre~\ref{chap:discussion}).
+\item \textbf{Usage.} Le projet a une vocation académique : les prédictions de l'application sont indicatives et ne doivent pas servir à prendre des décisions concernant des personnes.
+\end{itemize}
+% ============================== CHAPITRE 4 ===================================
+\chapter{Organisation du projet et environnement technique}\label{chap:org}
+Un projet de Data Mining n'est exploitable que s'il est \textbf{reproductible} : un tiers doit pouvoir retrouver les mêmes résultats à partir des mêmes données. Ce chapitre décrit l'organisation du dépôt GitHub, la façon dont l'équipe a travaillé, les bibliothèques utilisées et la procédure de reproduction.
+
+La Figure~\ref{fig:pipeline} donne une vue d'ensemble de la chaîne de traitement, qui sert de fil conducteur à l'ensemble du rapport.
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[bx/.style={box,minimum width=3.0cm,minimum height=1.55cm,text width=2.8cm}]
+\node[bx] (a) at (0,0) {\textbf{Données brutes}\\[2pt]reviews.csv\\23\,486 lignes\\$\times$ 11 colonnes};
+\node[bx] (b) at (3.7,0) {\textbf{Notebook 01}\\[2pt]EDA\\tests statistiques\\nettoyage};
+\node[bx] (c) at (7.4,0) {\textbf{Données nettoyées}\\[2pt]reviews\_clean.csv};
+\node[bx] (d) at (11.1,0) {\textbf{Notebook 02}\\[2pt]split 80/20\\ColumnTransformer\\TF-IDF};
+\node[bx] (e) at (0,-3.3) {\textbf{Notebook 03}\\[2pt]6 modèles\\GridSearchCV\\CV stratifiée};
+\node[bx,boxrose] (f) at (3.7,-3.3) {\textbf{Artefacts joblib}\\[2pt]models/*.pkl\\(4 fichiers)};
+\node[bx,boxvert] (g) at (7.4,-3.3) {\textbf{Application}\\[2pt]src/app.py\\6 onglets};
+\draw[flow] (a) -- (b); \draw[flow] (b) -- (c); \draw[flow] (c) -- (d);
+\draw[flow] (d.south) -- ++(0,-0.85) -| (e.north);
+\node[font=\sffamily\tiny\itshape,text=ardoise,above] at (5.55,-1.62) {matrices creuses train / test};
+\draw[flow] (e) -- (f); \draw[flow] (f) -- (g);
+\end{tikzpicture}
+\caption{Vue d'ensemble du pipeline : des données brutes à l'application Streamlit.}\label{fig:pipeline}
+\end{figure}
+
+\section{Structure du dépôt}
+Le dépôt est public et organisé de manière à séparer nettement les données, les notebooks, les modèles sérialisés, le code de l'application et la documentation. Cette organisation respecte l'arborescence recommandée par le cahier des charges (\code{data/}, \code{notebooks/}, \code{src/}, \code{docs/}, \code{requirements.txt}) et y ajoute un dossier \code{models/} pour les artefacts entraînés.
+
+\begin{codebox}
+\begin{Verbatim}[fontsize=\fontsize{7.4}{8.9}\selectfont]
+Prediction-des-recommandations--dachats--de-vetements--pour--femmes/
+├── data/
+│   ├── raw/
+│   │   └── reviews.csv                  # dataset brut (23 486 lignes, 11 colonnes)
+│   └── processed/
+│       └── reviews_clean.csv            # dataset nettoyé (notebook 01)
+├── docs/
+│   └── Rapport_MiniProject.pdf          # rapport écrit du mini-projet
+├── models/
+│   ├── best_model.pkl                   # modèle final (Linear SVC)
+│   ├── preprocessor.pkl                 # ColumnTransformer (imputation, scaling, OHE, TF-IDF)
+│   ├── review_tfidf.pkl                 # vectoriseur TF-IDF (Review Text)
+│   └── title_tfidf.pkl                  # vectoriseur TF-IDF (Title)
+├── notebooks/
+│   ├── 01_eda_and_cleaning.ipynb        # exploration, nettoyage, tests statistiques
+│   ├── 02_preprocessing_encoding.ipynb  # split train/test, encodage, TF-IDF
+│   └── 03_classification_models.ipynb   # entraînement, comparaison, sauvegarde du modèle
+├── src/
+│   ├── app.py                           # application Streamlit (démo interactive)
+│   └── config.toml                      # thème Streamlit (couleurs, mode clair)
+├── .gitignore
+├── README.md
+└── requirements.txt
+\end{Verbatim}
+\end{codebox}
+
+Le Tableau~\ref{tab:depot} précise le rôle de chaque élément et le chapitre qui le détaille.
+
+\begin{ltab}{L{0.36}L{0.46}L{0.18}}{Rôle de chaque élément du dépôt}{tab:depot}{\hc{Élément}&\hc{Rôle}&\hc{Détaillé au}}
+\path{data/raw/reviews.csv} & Jeu de données brut, jamais modifié & chapitre~\ref{chap:donnees}\\
+\path{data/processed/reviews_clean.csv} & Jeu nettoyé, produit par le notebook 01 & chapitre~\ref{chap:eda}\\
+\path{notebooks/01_eda_and_cleaning.ipynb} & Exploration, tests statistiques, nettoyage & chapitre~\ref{chap:eda}\\
+\path{notebooks/02_preprocessing_encoding.ipynb} & Découpage train/test, ColumnTransformer, TF-IDF & chapitre~\ref{chap:prep}\\
+\path{notebooks/03_classification_models.ipynb} & Six approches, GridSearchCV, sauvegarde du champion & chapitre~\ref{chap:modeles}\\
+\path{models/*.pkl} & Modèle final, préprocesseur et vectoriseurs TF-IDF sérialisés (joblib) & chapitres~\ref{chap:prep} et~\ref{chap:app}\\
+\path{src/app.py}, \path{src/config.toml} & Application Streamlit et thème visuel & chapitre~\ref{chap:app}\\
+\path{docs/} & Rapport du mini-projet (ce document) & ---\\
+\path{requirements.txt}, \path{.gitignore} & Dépendances figées ; fichiers exclus du suivi git (environnement virtuel) & section~\ref{sec:env}\\
+\end{ltab}
+
+\section{Gestion de version et travail collaboratif}
+Le projet est entièrement hébergé sur un dépôt GitHub public, conformément au cahier des charges. L'historique de la branche principale \code{main} comptait 13 commits à la date de rédaction de ce rapport. Le travail s'est déroulé en plusieurs temps : mise en place de la structure et des dépendances sur des branches de fonctionnalité fusionnées par \textit{pull request}, puis développement des notebooks et de l'application, enfin rédaction du README et du présent rapport.
+
+Le cahier des charges évalue la contribution de chaque membre à travers l'historique Git (commits, lignes ajoutées ou supprimées, pull requests fusionnées). Dans les supports publics, les étudiants ne sont identifiés que par leur code étudiant, conformément à la règle d'anonymisation ; le compte GitHub propriétaire du dépôt est \code{RSD018}.
+
+\begin{ltab}{B{0.22}L{0.46}L{0.32}}{Lots de travail du projet et livrables associés}{tab:lots}{\hc{Lot de travail}&\hc{Contenu}&\hc{Livrables}}
+L1. Mise en place & Structure du dépôt, dépendances, exclusions git & Arborescence, \code{requirements.txt}, \code{.gitignore}\\
+L2. Exploration et nettoyage & Qualité, distributions, outliers, corrélations, tests statistiques, nettoyage & Notebook 01, \code{reviews_clean.csv}\\
+L3. Prétraitement & Découpage stratifié, ColumnTransformer, TF-IDF & Notebook 02, \code{preprocessor.pkl}, vectoriseurs\\
+L4. Modélisation & Six approches, GridSearchCV, évaluation, sélection du champion & Notebook 03, \code{best_model.pkl}\\
+L5. Application & Interface Streamlit, thème & \code{src/app.py}, \code{src/config.toml}\\
+L6. Documentation & README, rapport technique & \code{README.md}, \code{docs/Rapport_MiniProject.pdf}\\
+\end{ltab}
+
+\section{Environnement technique}\label{sec:env}
+Le projet est écrit en Python et n'utilise que des bibliothèques de Machine Learning classique : aucune bibliothèque de Deep Learning (TensorFlow, PyTorch, Keras) ne figure dans les dépendances. Le fichier \code{requirements.txt} compte 126 lignes et fige les versions exactes de toutes les dépendances, y compris transitives. Ce choix est essentiel ici : les fichiers \code{.pkl} produits par \code{joblib} ne sont garantis compatibles qu'avec la version de scikit-learn qui les a créés. Le Tableau~\ref{tab:biblio} présente les bibliothèques principales.
+
+\begin{ltab}{B{0.24}L{0.20}L{0.56}}{Principales bibliothèques et versions figées dans \code{requirements.txt}}{tab:biblio}{\hc{Bibliothèque}&\hc{Version}&\hc{Rôle dans le projet}}
+scikit-learn & 1.9.1 & Pipeline, ColumnTransformer, TF-IDF, algorithmes, GridSearchCV, métriques\\
+pandas & 3.0.5 & Chargement, exploration et nettoyage des données tabulaires\\
+NumPy & 2.5.3 & Calcul numérique sur tableaux\\
+SciPy & 1.18.1 & Tests statistiques (Mann-Whitney, $\chi^2$) et matrices creuses\\
+matplotlib / seaborn & 3.11.2 / 0.13.2 & Visualisations des notebooks\\
+joblib & 1.6.0 & Sérialisation du modèle, du préprocesseur et des vectoriseurs\\
+Streamlit & 1.64.0 & Application web interactive\\
+JupyterLab & 4.6.3 & Exécution des notebooks\\
+\end{ltab}
+
+Le dossier de l'environnement virtuel (\code{venv/} ou \code{.venv/}) est exclu du suivi git par le fichier \code{.gitignore} : seul \code{requirements.txt} est versionné, ce qui permet à chacun de recréer l'environnement.
+
+\section{Reproductibilité}
+La procédure complète est décrite à l'annexe~\ref{app:repro}. En résumé, après avoir cloné le dépôt, créé un environnement virtuel et installé les dépendances, il suffit de placer \code{reviews.csv} dans \code{data/raw/} puis d'exécuter les trois notebooks dans l'ordre. Chaque étape consomme la sortie de la précédente (Tableau~\ref{tab:chaine}), ce qui rend la chaîne de traitement explicite.
+
+\begin{ltab}{B{0.18}L{0.28}L{0.24}L{0.30}}{Chaîne de traitement : entrées et sorties de chaque étape}{tab:chaine}{\hc{Étape}&\hc{Notebook}&\hc{Entrée}&\hc{Sortie}}
+1. Nettoyage & \path{01_eda_and_cleaning} & \path{data/raw/reviews.csv} & \path{data/processed/reviews_clean.csv}\\
+2. Prétraitement & \path{02_preprocessing_encoding} & \path{reviews_clean.csv} & matrices creuses train/test, \path{models/preprocessor.pkl}\\
+3. Modélisation & \path{03_classification_models} & matrices train/test & \path{models/best_model.pkl}\\
+4. Démonstration & \path{src/app.py} & \path{models/*.pkl} & interface Streamlit\\
+\end{ltab}
+
+Deux mécanismes garantissent des résultats identiques d'une exécution à l'autre : une graine aléatoire fixée (\code{random_state=42}) pour les modèles à composante aléatoire, \ie{} Decision Tree, Random Forest et \textbf{Linear SVC} ; et un découpage train/test \textbf{stratifié} (\code{stratify=y}).
+% ============================== CHAPITRE 5 ===================================
+\chapter{Exploration, tests statistiques et nettoyage}\label{chap:eda}
+Ce chapitre décrit le travail du notebook \code{01_eda_and_cleaning.ipynb}. L'analyse exploratoire (EDA, \textit{Exploratory Data Analysis}) répond à une question simple : \textbf{que contiennent réellement les données, et sont-elles prêtes pour la modélisation ?} Elle précède toujours le choix des modèles, car elle détermine les tests applicables, le traitement des valeurs manquantes et les risques à surveiller.
+
+\section{Démarche du notebook 01}
+Le notebook enchaîne huit étapes, de la compréhension à la sauvegarde du jeu nettoyé :
+\begin{enumerate}
+\item exploration structurelle et typage des variables (quantitatives, catégorielles, textuelles, cible) ;
+\item analyse des valeurs manquantes et des doublons ;
+\item statistiques descriptives et distributions (histogrammes, courbes de densité KDE) ;
+\item détection des valeurs atypiques par la règle de Tukey (IQR) ;
+\item analyse de la variable cible et de son déséquilibre ;
+\item matrice de corrélation de Pearson ;
+\item deux tests statistiques : Mann-Whitney U et $\chi^2$ d'indépendance ;
+\item nettoyage et sauvegarde dans \code{data/processed/reviews_clean.csv}.
+\end{enumerate}
+
+\section{Typage des variables et conséquences}
+Identifier correctement le \textbf{type statistique} de chaque variable est la première décision de l'analyse, car elle conditionne les résumés numériques, les graphiques, les tests et l'encodage (Tableau~\ref{tab:typage}).
+
+\begin{ltab}[\footnotesize]{B{0.17}L{0.17}L{0.21}L{0.20}L{0.25}}{Type statistique des variables et conséquences pour l'analyse}{tab:typage}{\hc{Type}&\hc{Variables}&\hc{Résumés pertinents}&\hc{Visualisation}&\hc{Encodage dans le pipeline}}
+Quantitative discrète & Age, Positive Feedback Count & Moyenne, médiane, écart-type, quartiles & Histogramme, KDE, boîte & Imputation (médiane) + standardisation\\
+Ordinale & Rating (1 à 5) & Médiane, mode, effectifs par niveau & Diagramme en barres & Traitée comme numérique (standardisée)\\
+Nominale & Division, Department, Class & Effectifs, mode & Diagramme en barres & Imputation (plus fréquent) + one-hot\\
+Textuelle & Title, Review Text & Longueur, termes fréquents & Nuage ou barres de termes & TF-IDF\\
+Binaire (cible) & Recommended IND & Proportion de chaque classe & Diagramme en barres & Aucun (cible $y$)\\
+Identifiant & Clothing ID & Nombre de valeurs distinctes & --- & Supprimé\\
+\end{ltab}
+
+Traiter la note comme une variable numérique est un choix usuel, mais il suppose que les écarts entre niveaux successifs sont comparables (passer de 1 à 2 vaut passer de 4 à 5). C'est pourquoi les tests portant sur cette variable doivent être des tests de rangs (section~\ref{sec:mw-test}).
+
+\section{Qualité des données : valeurs manquantes et doublons}
+\subsection{Valeurs manquantes}
+On distingue trois mécanismes. Une donnée est manquante \textbf{complètement au hasard} (MCAR) lorsque son absence ne dépend d'aucune variable ; \textbf{au hasard} (MAR) lorsqu'elle dépend d'autres variables observées ; \textbf{non au hasard} (MNAR) lorsqu'elle dépend de la valeur manquante elle-même. Dans ce jeu de données, l'absence de titre ou de texte résulte plutôt d'un champ facultatif laissé vide : c'est une information sur le comportement de la cliente, à ne pas effacer. Le Tableau~\ref{tab:strategies} compare les stratégies possibles.
+
+\begin{ltab}{B{0.28}L{0.36}L{0.36}}{Stratégies de traitement des valeurs manquantes}{tab:strategies}{\hc{Stratégie}&\hc{Quand l'utiliser}&\hc{Inconvénient}}
+Supprimer les lignes & Très peu de lignes concernées, absence aléatoire & Perte d'information ; biais si l'absence est informative\\
+Imputer par la médiane ou le mode & Variables numériques ou catégorielles à faible taux de manquants & Réduit la variance ; statistique à apprendre sur l'entraînement seul\\
+Créer une modalité \gl{Unknown} & Variables catégorielles dont l'absence est informative & Ajoute une modalité\\
+Remplacer par un texte vide & Champs textuels facultatifs & L'avis est conservé mais sans contenu textuel\\
+\end{ltab}
+
+Le projet combine deux niveaux de traitement. Dans le notebook 01, les chaînes vides sont converties en modalité \gl{Unknown} et les valeurs textuelles et catégorielles manquantes sont traitées. Dans le notebook 02, un \code{SimpleImputer} (médiane pour les variables numériques, valeur la plus fréquente pour les variables catégorielles) sécurise le traitement de toute valeur manquante restante, avec des statistiques apprises sur le jeu d'entraînement uniquement (chapitre~\ref{chap:prep}).
+
+\subsection{Doublons}
+Un doublon est une ligne strictement identique à une autre. Les doublons gonflent artificiellement certains effectifs et, surtout, peuvent se retrouver à la fois dans l'entraînement et dans le test, ce qui constitue une fuite de données (section~\ref{sec:leakage}). Le nettoyage supprime donc les doublons exacts \textit{avant} tout découpage.
+
+\section{Statistiques descriptives et distributions}
+Pour chaque variable numérique, le notebook calcule les résumés de tendance centrale (moyenne, médiane) et de dispersion (écart-type, quartiles, étendue). La \textbf{médiane} est préférée à la moyenne lorsque la distribution est asymétrique, car elle n'est pas tirée par les valeurs extrêmes. Les distributions sont visualisées par des histogrammes et par des courbes de densité estimées par noyau (KDE), qui lissent l'histogramme :
+\begin{equation}\label{eq:kde}
+\hat{f}_h(x) = \frac{1}{n h}\sum_{i=1}^{n} K\!\left(\frac{x - x_i}{h}\right)
+\end{equation}
+où $K$ est un noyau (en général gaussien) et $h$ la largeur de bande qui contrôle le lissage : trop petite, la courbe épouse le bruit ; trop grande, elle masque les modes. Trois lectures sont systématiques : la \textit{forme} (symétrie, asymétrie, plusieurs modes), l'\textit{étendue} (valeurs extrêmes plausibles ?) et la \textit{discrétisation} (variables entières à peu de niveaux).
+\begin{itemize}
+\item \textbf{Age} : variable entière dont les valeurs observées vont de 18 à 99 ans ; les âges très élevés sont les candidats naturels à un examen de plausibilité.
+\item \textbf{Positive Feedback Count} : compteur dont les valeurs vont de 0 à 122. Un compteur de ce type est typiquement très asymétrique à droite : la plupart des avis reçoivent peu ou pas de retours, quelques-uns en reçoivent beaucoup.
+\item \textbf{Rating} : variable discrète à cinq niveaux. Les notes élevées dominent (dans les analyses publiées sur ce jeu, la note maximale représente plus de la moitié des avis), ce qui est cohérent avec les 82,2\,\% de recommandations.
+\end{itemize}
+
+\section{Valeurs atypiques (règle de Tukey)}
+La règle de Tukey (section~\ref{sec:tukey}) signale les observations situées hors de l'intervalle $[Q_1 - 1{,}5\,\mathrm{IQR}\ ;\ Q_3 + 1{,}5\,\mathrm{IQR}]$. Son application mécanique appelle des précautions :
+\begin{itemize}
+\item \textbf{Pour une variable à quelques niveaux comme la note}, la règle peut produire des résultats trompeurs. Les analyses publiées indiquent qu'environ 78\,\% des avis ont 4 ou 5 et qu'environ 10\,\% ont 1 ou 2 : les quartiles valent donc 4 et 5, l'IQR vaut 1 et la limite basse est $4 - 1{,}5 = 2{,}5$. Les notes 1 et 2 seraient ainsi qualifiées d'\gl{atypiques}, alors qu'il s'agit d'avis parfaitement légitimes, et précisément des plus liés aux non-recommandations.
+\item \textbf{Pour un compteur asymétrique comme Positive Feedback Count}, les valeurs élevées sont atypiques par construction, mais correspondent à des avis réellement très populaires.
+\end{itemize}
+Le nettoyage décrit à la section~\ref{sec:nettoyage} ne comporte pas de suppression d'observations au titre des valeurs atypiques. Ce choix est cohérent : les valeurs signalées sont plausibles, la médiane et les quartiles utilisés par le pipeline sont peu sensibles aux extrêmes, et supprimer les notes basses retirerait justement l'information la plus utile pour repérer les non-recommandations.
+
+\section{Analyse de la cible et corrélations}
+La répartition de \code{Recommended IND} (82,2\,\% / 17,8\,\%, section~\ref{sec:cible}) est analysée en premier : elle fixe le plancher de performance du baseline Zero-R et impose le découpage stratifié. Le notebook calcule ensuite la \textbf{matrice de corrélation de Pearson} entre variables numériques (section~\ref{sec:pearson}). Les repères usuels, proposés par Cohen, qualifient une corrélation de faible autour de 0,1, de modérée autour de 0,3 et de forte à partir de 0,5 en valeur absolue. La matrice sert à repérer d'éventuelles variables redondantes et les variables les plus liées à la cible. Comme l'âge, le nombre de retours positifs et la note ne sont pas des variables continues à distribution normale, ces coefficients restent des indicateurs descriptifs ; l'inférence est confiée aux tests de rangs et du $\chi^2$ ci-dessous.
+
+\section{Tests statistiques et justification de leur choix}
+Le cahier des charges exige au moins deux tests statistiques scientifiquement appropriés et explicitement justifiés. Le projet en réalise deux, qui couvrent les deux grandes familles de situations : une variable ordinale contre une cible binaire, et deux variables qualitatives. Les deux tests sont exécutés avec la bibliothèque SciPy (\code{scipy.stats}) au seuil $\alpha = 0{,}05$.
+
+\subsection{Test de Mann-Whitney U : Rating $\times$ Recommended IND}\label{sec:mw-test}
+\begin{itemize}
+\item \textbf{Question.} Les clientes qui recommandent un article donnent-elles des notes différentes de celles qui ne le recommandent pas ?
+\item \textbf{Hypothèses.} $H_0$ : la distribution de Rating est la même dans les deux groupes (avis recommandés / non recommandés). $H_1$ : l'un des groupes tend à donner des notes plus élevées.
+\item \textbf{Pourquoi ce test.} (1) Rating est une variable \textit{ordinale} à cinq niveaux : la moyenne et la variance n'ont pas de sens strict, ce qui exclut le test $t$ de Student. (2) Sa distribution est très asymétrique, bornée à 5 (effet plafond) : l'hypothèse de normalité est manifestement fausse. (3) Il y a exactement deux groupes \textit{indépendants} (chaque avis appartient à un seul groupe). (4) Avec plus de vingt mille observations, l'approximation normale du test est excellente, et la correction pour les très nombreux ex æquo (cinq valeurs seulement) est prévue.
+\item \textbf{Règle de décision.} On rejette $H_0$ si $p < 0{,}05$. La taille d'effet est la probabilité de supériorité $U_1/(n_1 n_2)$ (section~\ref{sec:mannwhitney}) : plus elle s'éloigne de 0,5, plus la note discrimine les groupes.
+\item \textbf{Lien avec la modélisation.} Rating fait partie des variables explicatives ; le test mesure donc aussi le pouvoir prédictif attendu de cette variable, et rappelle qu'une partie de la performance des modèles provient d'une variable fortement liée à la cible (section~\ref{sec:ref-ext}).
+\end{itemize}
+
+\subsection{Test du \texorpdfstring{$\chi^2$}{khi-deux} d'indépendance : Department Name $\times$ Recommended IND}
+\begin{itemize}
+\item \textbf{Question.} La probabilité de recommander dépend-elle du département du produit (robes, hauts, bas, vestes, lingerie, tendance) ?
+\item \textbf{Hypothèses.} $H_0$ : Department Name et Recommended IND sont indépendantes. $H_1$ : elles sont associées.
+\item \textbf{Pourquoi ce test.} (1) Les deux variables sont qualitatives (nominale à 6 modalités, binaire) : le tableau de contingence $6 \times 2$ est l'outil naturel, alors qu'une corrélation de Pearson n'aurait aucun sens pour une variable nominale. (2) Les effectifs (plus de 23\,000 avis) rendent la condition \gl{effectifs attendus $\geq 5$} vérifiable et très probablement satisfaite, ce qui rend le test exact de Fisher inutile. (3) Les observations sont indépendantes (un avis par ligne).
+\item \textbf{Règle de décision.} Le nombre de degrés de liberté est $(6 - 1)(2 - 1) = 5$ (6 si la modalité \gl{Unknown} est conservée). On rejette $H_0$ si $p < 0{,}05$ ; la force de l'association se lit sur le V de Cramér.
+\item \textbf{Précaution.} Un résultat significatif établit une association, non une causalité, et n'indique pas quels départements s'écartent de l'indépendance : les résidus standardisés permettent de les repérer.
+\end{itemize}
+
+\subsection{Synthèse des deux tests}
+\begin{ltab}{B{0.20}L{0.38}L{0.42}}{Comparaison des deux tests statistiques du projet}{tab:deuxtests}{&\hc{Mann-Whitney U}&\hc{$\chi^2$ d'indépendance}}
+Variables & Rating (ordinale) $\times$ Recommended IND (binaire) & Department Name (nominale) $\times$ Recommended IND (binaire)\\
+Nature du test & Non paramétrique, fondé sur les rangs & Association entre variables qualitatives\\
+Hypothèse nulle & Mêmes distributions de notes dans les deux groupes & Indépendance des deux variables\\
+Conditions & Groupes indépendants ; variable au moins ordinale & Observations indépendantes ; effectifs attendus $\geq 5$\\
+Taille d'effet & Probabilité de supériorité $U_1/(n_1 n_2)$ & V de Cramér\\
+Seuil de décision & $\alpha = 0{,}05$ & $\alpha = 0{,}05$\\
+Alternative écartée & Test $t$ de Student (normalité non vérifiée, variable ordinale) & Corrélation de Pearson (variable nominale)\\
+\end{ltab}
+
+Ces deux tests ont pour objet de valider l'existence d'un lien entre ces variables et la cible ; leurs sorties détaillées (statistique $U$, statistique du $\chi^2$, p-valeurs) sont affichées par le notebook 01. Avec deux tests, le risque cumulé d'erreur de type I reste modéré ; une correction de Bonferroni (seuil de 0,025 par test) ou de Benjamini-Hochberg serait possible si l'on multipliait les tests.
+
+\begin{calloutpink}{Significatif n'est pas synonyme d'important}
+Avec plus de vingt mille avis, presque n'importe quel écart devient statistiquement significatif. La lecture correcte associe toujours la p-valeur à une taille d'effet et à la plausibilité métier : c'est la force du lien, pas seulement son existence, qui justifie l'usage d'une variable dans le modèle.
+\end{calloutpink}
+
+\section{Procédure de nettoyage}\label{sec:nettoyage}
+Le nettoyage applique les opérations suivantes, dans cet ordre :
+\begin{enumerate}
+\item \textbf{Suppression des doublons exacts}, pour éviter qu'un même avis figure à la fois dans l'entraînement et dans le test ;
+\item \textbf{Suppression des espaces superflus} en début et en fin de chaîne : sans cela, \gl{Tops} et \gl{Tops} suivi d'un espace seraient comptés comme deux modalités distinctes ;
+\item \textbf{Remplacement des chaînes vides par \gl{Unknown}}, ce qui uniformise la représentation de l'absence d'information (valeur manquante, chaîne vide et chaîne d'espaces sont des écritures différentes d'une même absence) ;
+\item \textbf{Traitement des valeurs textuelles et catégorielles manquantes} ;
+\item \textbf{Suppression des lignes dont la cible est manquante}, puisqu'elles ne peuvent servir ni à l'apprentissage ni à l'évaluation ;
+\item \textbf{Sauvegarde} du résultat dans \code{data/processed/reviews_clean.csv}.
+\end{enumerate}
+Comme les doublons sont très rares (section~\ref{sec:qualite}) et que la cible est complète, le jeu nettoyé compte pratiquement autant de lignes que le jeu brut ; le décompte exact est affiché par le notebook. Le jeu brut \code{reviews.csv} n'est jamais modifié : le nettoyage produit un nouveau fichier, ce qui préserve la traçabilité.
+
+\section{Bilan du chapitre}
+\begin{itemize}
+\item Le jeu est de bonne qualité : la cible est complète, les valeurs manquantes se concentrent sur deux champs textuels facultatifs et les doublons sont très rares.
+\item Les valeurs atypiques sont examinées mais conservées, car elles sont plausibles et informatives.
+\item Deux tests complémentaires (Mann-Whitney U et $\chi^2$) sont choisis en fonction de la nature des variables et justifiés explicitement.
+\item Le jeu nettoyé est prêt pour le prétraitement, qui fait l'objet du chapitre suivant.
+\end{itemize}
+% ============================== CHAPITRE 6 ===================================
+\chapter{Prétraitement et encodage des variables}\label{chap:prep}
+Ce chapitre décrit le notebook \code{02_preprocessing_encoding.ipynb}. Son rôle est de transformer un tableau hétérogène (nombres, catégories, textes libres) en une matrice numérique que les algorithmes peuvent exploiter, \textbf{sans que le jeu de test n'influence ces transformations}.
+
+\section{Séparation X / y et suppression de Clothing ID}\label{sec:clothingid}
+Le jeu nettoyé est d'abord séparé en une matrice de variables explicatives \textbf{X} et un vecteur cible \textbf{y} (\code{Recommended IND}). La colonne \code{Clothing ID} est supprimée de X. Elle est stockée sous forme d'entier, mais ce n'est pas une grandeur numérique au sens statistique : le produit n\textsuperscript{o}~1000 n'est pas \gl{plus grand} que le produit n\textsuperscript{o}~500, et faire des moyennes d'identifiants n'a aucun sens. Trois arguments confirment ce choix :
+\begin{itemize}
+\item \textbf{Ordre et magnitude arbitraires.} Un algorithme à distance ou à marge (K-NN, SVM) interpréterait à tort l'écart entre deux identifiants comme une proximité entre produits.
+\item \textbf{Cardinalité élevée.} Avec 1\,206 identifiants distincts pour 23\,486 avis, soit environ 19 avis par produit en moyenne, un encodage one-hot ajouterait plus d'un millier de colonnes presque vides et favoriserait le surapprentissage sur des produits précis.
+\item \textbf{Absence de généralisation.} Un modèle fondé sur l'identifiant ne pourrait rien dire d'un nouveau produit ; on souhaite au contraire qu'il s'appuie sur ce que dit la cliente et sur le type de produit (division, département, catégorie).
+\end{itemize}
+Après cette étape, X contient huit colonnes : trois numériques (Age, Rating, Positive Feedback Count), trois catégorielles (Division Name, Department Name, Class Name) et deux textuelles (Title, Review Text).
+
+\section{Découpage entraînement / test stratifié}
+Le jeu est découpé en un jeu d'\textbf{entraînement} (80\,\%) et un jeu de \textbf{test} (20\,\%). Pour un jeu nettoyé d'environ 23\,500 avis, cela représente de l'ordre de 18\,800 avis pour l'entraînement et de 4\,700 pour le test. Le découpage est \textbf{stratifié} (\code{stratify=y}) : chaque sous-ensemble conserve les proportions de classes du jeu complet (Figure~\ref{fig:split}). La conséquence se vérifie dans les résultats : l'accuracy du baseline Zero-R sur le jeu de test (0,8223) coïncide avec la proportion de la classe 1.
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=0.1cm,y=-1.05cm]
+\foreach \l/\w/\y in {{Jeu nettoyé (100\,\%)}/100/0,{Entraînement (80\,\%)}/80/1,{Test (20\,\%)}/20/2}{
+  \node[anchor=east,font=\sffamily\scriptsize] at (-2,\y) {\l};
+  \pgfmathsetmacro{\wa}{\w*0.822}
+  \fill[azur] (0,\y-0.32) rectangle (\wa,\y+0.32);
+  \fill[rose] (\wa,\y-0.32) rectangle (\w,\y+0.32);}
+\node[white,font=\sffamily\scriptsize] at (41,0) {82,2\,\%};\node[white,font=\sffamily\tiny] at (91,0) {17,8\,\%};
+\node[white,font=\sffamily\scriptsize] at (33,1) {82,2\,\%};\node[white,font=\sffamily\tiny] at (73,1) {17,8\,\%};
+\node[font=\sffamily\scriptsize\itshape,text=ardoise,anchor=west] at (23,2) {mêmes proportions que le jeu complet (stratify = y)};
+\fill[azur] (22,3.25) rectangle (25,3.62);\node[font=\sffamily\scriptsize,anchor=west] at (26,3.43) {classe 1 (recommandé)};
+\fill[rose] (58,3.25) rectangle (61,3.62);\node[font=\sffamily\scriptsize,anchor=west] at (62,3.43) {classe 0 (non recommandé)};
+\end{tikzpicture}
+\caption{Découpage stratifié 80\,\% / 20\,\% : les proportions de classes sont identiques dans les trois ensembles.}\label{fig:split}
+\end{figure}
+
+Le choix 80/20 est un compromis courant : le jeu d'entraînement reste assez grand pour apprendre un vocabulaire riche, et le jeu de test, de plus de 4\,000 avis, est assez grand pour estimer l'accuracy avec une incertitude d'environ 0,4 point (section~\ref{sec:lecture}). Le découpage est réalisé \textit{avant} toute transformation, condition indispensable pour que le préprocesseur soit ajusté sur l'entraînement seul.
+
+\section{Le ColumnTransformer}
+Les trois familles de variables n'appellent pas le même traitement. Le \code{ColumnTransformer} de scikit-learn applique à chaque groupe de colonnes sa propre chaîne de transformations, puis assemble les résultats en une seule matrice (Figure~\ref{fig:ct} et Tableau~\ref{tab:traitements}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[bx/.style={box,text width=4.6cm,minimum height=1.6cm}]
+\node[box,minimum width=2.3cm,minimum height=4.2cm,text width=2.0cm] (x) at (0,0) {\textbf{\normalsize X (train)}\\[8pt]8 colonnes\\[6pt]Clothing ID\\retiré, cible\\isolée dans y};
+\node[bx] (n) at (5.1,2.25) {\textbf{Numériques (3)}\\Age \textperiodcentered\ Rating \textperiodcentered\ Positive Feedback Count\\SimpleImputer(médiane)\\$\rightarrow$ StandardScaler};
+\node[bx] (c) at (5.1,0) {\textbf{Catégorielles (3)}\\Division \textperiodcentered\ Department \textperiodcentered\ Class\\SimpleImputer(plus fréquent)\\$\rightarrow$ OneHotEncoder};
+\node[bx] (t) at (5.1,-2.25) {\textbf{Textuelles (2)}\\Title \textperiodcentered\ Review Text\\TF-IDF\\(un vectoriseur par champ)};
+\node[boxrose,minimum width=2.2cm,minimum height=3.3cm,text width=1.9cm] (m) at (10.6,0) {\textbf{Matrice creuse}\\[6pt]$\approx$ 13\,000\\colonnes};
+\foreach \i in {n,c,t}{\draw[flow] (x.east) -- (\i.west); \draw[flow] (\i.east) -- (m.west);}
+\end{tikzpicture}
+\caption{Structure du ColumnTransformer : trois branches parallèles assemblées en une matrice creuse.}\label{fig:ct}
+\end{figure}
+
+\begin{ltab}{B{0.15}L{0.24}L{0.30}L{0.31}}{Traitement appliqué à chaque famille de variables}{tab:traitements}{\hc{Famille}&\hc{Variables}&\hc{Transformation}&\hc{Justification}}
+Numériques & Age, Rating, Positive Feedback Count & \path{SimpleImputer(median)} puis \path{StandardScaler} & Médiane robuste aux extrêmes ; mise à l'échelle pour les modèles à distance ou à marge\\
+Catégorielles & Division, Department, Class & \path{SimpleImputer(most_frequent)} puis \path{OneHotEncoder} & Aucun ordre artificiel entre modalités\\
+Textuelles & Title, Review Text & TF-IDF, un vectoriseur par champ & Transforme le texte en poids numériques tenant compte de la rareté des termes\\
+\end{ltab}
+
+\subsection{Variables numériques}
+Les valeurs manquantes éventuelles sont remplacées par la médiane de l'entraînement, puis chaque variable est standardisée par son score $z$ (équation~\eqref{eq:zscore}). Les jeux Age, Rating et Positive Feedback Count n'ayant aucune valeur manquante dans le jeu brut, l'imputeur joue ici un rôle de \textit{garde-fou} : il rend le pipeline robuste à une donnée manquante saisie ultérieurement, par exemple dans l'application. La standardisation est essentielle pour le K-NN et le SVM, qui comparent des distances ou cherchent une marge : sans elle, l'âge (dizaines) dominerait la note (1 à 5).
+
+\subsection{Variables catégorielles}
+Les valeurs manquantes sont remplacées par la modalité la plus fréquente, puis chaque modalité devient une colonne binaire. Avec 3 modalités pour Division Name, 6 pour Department Name et 20 pour Class Name, l'encodage produit au plus $3 + 6 + 20 = 29$ colonnes binaires, auxquelles s'ajoutent les éventuelles modalités \gl{Unknown} créées au nettoyage. Ces trois variables sont emboîtées (une classe appartient à un département, qui appartient à une division) : elles sont partiellement redondantes, ce qui est sans gravité pour les modèles retenus.
+
+\subsection{Variables textuelles}
+Le titre et le corps de l'avis sont vectorisés \textbf{séparément}, chacun par son propre vectoriseur TF-IDF (section~\ref{sec:tfidf}). Ce choix se justifie par la nature différente des deux champs : le titre est court et synthétique, le corps est long et détaillé ; un même mot n'a ni la même fréquence documentaire ni le même poids dans les deux. Vectoriser séparément conserve cette information, alors qu'une vectorisation du texte concaténé la mélangerait. Le vocabulaire et les idf sont appris sur l'entraînement.
+
+Au total, la matrice obtenue compte environ \textbf{13\,000 colonnes}. Comme les parties numérique et catégorielle ne représentent que $3 + 29 = 32$ colonnes au plus, la quasi-totalité de ces colonnes provient du TF-IDF : l'information textuelle domine donc largement l'espace de représentation.
+
+\section{Absence de fuite de données}
+Le projet applique strictement la règle : \code{fit_transform} sur le jeu d'entraînement, \code{transform} seul sur le jeu de test. Le Tableau~\ref{tab:fuiteprojet} indique, pour chaque étape, ce qui est appris sur l'entraînement et la façon dont le test en bénéficie sans l'influencer.
+
+\begin{ltab}{B{0.24}L{0.30}L{0.46}}{Ce que le préprocesseur apprend sur l'entraînement et la façon dont il traite le test}{tab:fuiteprojet}{\hc{Étape}&\hc{Appris sur l'entraînement}&\hc{Appliqué au test}}
+Imputation numérique & Médiane de chaque variable & Les valeurs manquantes reçoivent ces médianes\\
+Standardisation & Moyenne $\mu$ et écart-type $\sigma$ & Score $z$ calculé avec les $\mu$ et $\sigma$ de l'entraînement\\
+Imputation catégorielle & Modalité la plus fréquente & Les valeurs manquantes reçoivent cette modalité\\
+Encodage one-hot & Liste des modalités & Mêmes colonnes ; une modalité jamais vue ne peut pas recevoir de colonne propre\\
+TF-IDF & Vocabulaire et idf de chaque terme & Poids calculés avec le vocabulaire et les idf de l'entraînement ; mots inconnus ignorés\\
+\end{ltab}
+
+\begin{calloutwarn}{Une nuance méthodologique}
+D'après la chaîne de traitement décrite (le notebook 03 prend en entrée les matrices déjà transformées), le préprocesseur est ajusté sur l'ensemble du jeu d'entraînement avant la validation croisée. Les plis de validation ont donc contribué au calcul des idf et des moyennes. Cette fuite est mineure, car elle reste interne à l'estimation par validation croisée et \textbf{n'atteint pas le jeu de test}, dont les résultats restent fiables. Elle pourrait être supprimée en plaçant le préprocesseur dans un \code{Pipeline} passé à \code{GridSearchCV} (chapitre~\ref{chap:discussion}).
+\end{calloutwarn}
+
+\section{Matrices creuses et coût mémoire}
+Une matrice dense de 18\,800 lignes et 13\,000 colonnes stockée en nombres à virgule flottante sur 8 octets occuperait $18\,800 \times 13\,000 \times 8$ octets, soit près de \textbf{2,0 Go}. Or un avis ne contient qu'une cinquantaine de termes distincts : la matrice TF-IDF est creuse. En supposant 50 valeurs non nulles par ligne et un stockage CSR (8 octets par valeur plus 4 octets par indice de colonne), la matrice creuse occupe seulement environ \textbf{11 Mo}, soit un facteur 170 de gain (estimation à titre d'ordre de grandeur). C'est ce qui rend possible l'entraînement de tous les modèles sur un ordinateur personnel, et ce qui explique pourquoi le choix de modèles acceptant des entrées creuses (section~\ref{sec:algos}) est déterminant.
+
+\section{Artefacts sérialisés}
+Les objets entraînés sont sauvegardés avec \code{joblib} dans le dossier \code{models/} afin d'être rechargés par l'application sans ré-entraînement (Tableau~\ref{tab:artefacts}).
+
+\begin{ltab}{L{0.22}L{0.36}L{0.17}L{0.25}}{Fichiers sérialisés du dossier \code{models/}}{tab:artefacts}{\hc{Fichier}&\hc{Contenu}&\hc{Produit par}&\hc{Utilisé par}}
+\code{preprocessor.pkl} & ColumnTransformer ajusté (imputation, scaling, one-hot, TF-IDF) & Notebook 02 & Notebook 03, application\\
+\code{review_tfidf.pkl} & Vectoriseur TF-IDF du champ Review Text & Notebook 02 & Archivage du vectoriseur\\
+\code{title_tfidf.pkl} & Vectoriseur TF-IDF du champ Title & Notebook 02 & Archivage du vectoriseur\\
+\code{best_model.pkl} & Modèle final : Linear SVC optimisé & Notebook 03 & Application\\
+\end{ltab}
+
+Deux précautions s'imposent. D'une part, un fichier \code{.pkl} n'est lisible de façon fiable qu'avec la version de scikit-learn qui l'a produit : c'est pourquoi \code{requirements.txt} fige les versions. D'autre part, charger un fichier \textit{pickle} exécute du code : on ne doit charger que des fichiers dont on connaît l'origine, comme ceux générés par les notebooks du projet.
+
+\section{Bilan du chapitre}
+\begin{itemize}
+\item Clothing ID est retiré : c'est un identifiant, non une grandeur statistique.
+\item Le découpage 80/20 est stratifié et précède toute transformation.
+\item Trois branches de transformation adaptées aux types de variables produisent une matrice creuse d'environ 13\,000 colonnes.
+\item Le préprocesseur est ajusté sur l'entraînement seul ; le jeu de test reste vierge de toute influence.
+\end{itemize}
+% ============================== CHAPITRE 7 ===================================
+\chapter{Modélisation et optimisation des hyperparamètres}\label{chap:modeles}
+Ce chapitre décrit le notebook \code{03_classification_models.ipynb}. Il présente le protocole expérimental, la théorie de chacun des six algorithmes comparés (principe, formules, hyperparamètres, atouts et limites sur des données textuelles creuses), la recherche systématique des hyperparamètres et la sélection du modèle final.
+
+\section{Protocole expérimental}
+Tous les modèles sont entraînés et évalués dans les mêmes conditions, ce qui garantit la comparabilité des résultats :
+\begin{enumerate}
+\item les six approches reçoivent les mêmes matrices d'entraînement et de test, issues du notebook 02 ;
+\item chaque modèle réglable est optimisé par \code{GridSearchCV} avec validation croisée stratifiée sur le seul jeu d'entraînement (le cahier des charges impose $K \geq 5$ plis) ;
+\item le meilleur estimateur de chaque recherche est ré-entraîné sur tout l'entraînement, puis évalué une seule fois sur le jeu de test avec trois métriques : accuracy, F1-score (classe 1) et ROC-AUC ;
+\item une graine aléatoire \code{random_state=42} est fixée pour les modèles à composante aléatoire (Decision Tree, Random Forest, Linear SVC) ;
+\item le modèle le plus performant est sérialisé dans \code{models/best_model.pkl}.
+\end{enumerate}
+
+\begin{ltab}{B{0.26}L{0.28}L{0.24}L{0.22}}{Les six approches comparées}{tab:six}{\hc{Modèle}&\hc{Famille}&\hc{Hyperparamètres à régler}&\hc{Optimisé par GridSearchCV}}
+Zero-R & Baseline & Aucun & Non (exempté)\\
+K-Nearest Neighbors & À base d'instances & Oui & Oui\\
+Decision Tree & Arbre de décision & Oui & Oui\\
+Random Forest & Ensemble d'arbres (bagging) & Oui & Oui\\
+Multinomial Naïve Bayes & Probabiliste (Bayes) & Oui (lissage) & Oui\\
+Linear SVC & Marge maximale (SVM linéaire) & Oui ($C$) & Oui\\
+\end{ltab}
+
+\section{Les algorithmes comparés}\label{sec:algos}
+\subsection{Zero-R : le baseline}
+Le classifieur Zero-R (règle zéro) ignore toutes les variables explicatives et prédit toujours la classe majoritaire de l'entraînement, ici la classe 1. Son accuracy attendue est donc égale à la proportion de cette classe : 0,8223 sur le jeu de test du projet. Il détecte tous les avis recommandés (rappel de 1) mais aucun avis non recommandé (spécificité de 0), et son F1-score vaut $2p/(1 + p) = 0{,}9025$. Il n'a aucun hyperparamètre et n'est donc pas optimisé. Son rôle est de fixer un plancher : un modèle qui ne le dépasse pas n'apporte aucune information. L'AUC d'un score constant vaut 0,5 ; elle n'est pas rapportée pour ce modèle (\gl{N/A} dans le tableau des résultats).
+
+\subsection{K-Nearest Neighbors (K-NN)}
+Le K-NN (Cover et Hart, 1967) est un algorithme \textit{à base d'instances} : il n'apprend aucun modèle explicite. Pour classer un nouvel avis $x$, il recherche les $K$ avis d'entraînement les plus proches selon une distance et prédit la classe majoritaire parmi eux (Figure~\ref{fig:knn}), éventuellement en pondérant chaque voisin par l'inverse de sa distance. Les distances usuelles sont la distance euclidienne, la distance de Manhattan et la distance cosinus :
+\begin{align}
+d_2(x,x') &= \sqrt{\sum_j (x_j - x'_j)^2} \qquad\qquad d_1(x,x') = \sum_j \lvert x_j - x'_j\rvert \label{eq:dist}\\
+d_{\cos}(x,x') &= 1 - \frac{x\cdot x'}{\lVert x\rVert\,\lVert x'\rVert} \label{eq:cosinus}
+\end{align}
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=0.95cm,y=0.9cm]
+\draw[ardoise!30,thin] (0,0) rectangle (8.8,7.4);
+\foreach \x/\y in {2.29/4.16, 4.31/3.23, 3.18/2.39, 1.65/1.95, 1.55/3.88, 2.64/3.03, 1.96/1.76, 1.32/2.02, 3.39/2.92, 2.17/2.65, 1.06/4.19, 1.30/2.94, 5.16/0.30, 1.08/2.14, 2.83/1.10, 2.43/2.87, 2.90/0.39, 3.44/4.58, 3.20/2.14, 1.99/0.30, 3.25/4.48, 3.45/0.30, 2.21/2.79, 2.14/3.98, 0.69/2.15, 3.38/3.94}{\fill[rose] (\x,\y) circle (2.3pt);}
+\foreach \x/\y in {6.21/6.61, 6.65/4.18, 7.62/4.82, 3.96/5.90, 8.27/6.50, 7.25/5.62, 2.92/6.18, 6.20/2.36, 5.19/4.39, 7.33/5.54, 6.37/5.68, 4.34/3.14, 6.07/5.06, 5.98/5.21, 5.38/6.04, 6.24/4.68, 3.63/2.42, 4.20/5.22, 7.14/4.92, 6.85/6.73, 8.40/5.73, 7.87/5.67, 4.45/2.79, 6.37/6.42, 8.40/4.63, 6.61/5.27}{\fill[azur] (\x,\y) circle (2.3pt);}
+\draw[navy,dashed,thick] (4.30,4.10) circle (0.98);
+\draw[ardoise] (4.30,4.10) -- (4.31,3.23);
+\draw[ardoise] (4.30,4.10) -- (3.38,3.94);
+\draw[ardoise] (4.30,4.10) -- (5.19,4.39);
+\draw[ardoise] (4.30,4.10) -- (4.34,3.14);
+\draw[ardoise] (4.30,4.10) -- (3.44,4.58);
+\node[star,star points=5,star point ratio=2.4,fill=black,inner sep=1.6pt] at (4.30,4.10) {};
+\fill[rose] (0.45,6.85) circle (2.3pt);\node[font=\sffamily\scriptsize,anchor=west] at (0.7,6.85) {classe 0};
+\fill[azur] (0.45,6.40) circle (2.3pt);\node[font=\sffamily\scriptsize,anchor=west] at (0.7,6.40) {classe 1};
+\node[star,star points=5,star point ratio=2.4,fill=black,inner sep=1.4pt] at (0.45,5.95) {};\node[font=\sffamily\scriptsize,anchor=west] at (0.7,5.95) {nouvel avis};
+\node[font=\sffamily\scriptsize,text=azur] at (4.4,-0.55) {$K = 5$ : 2 voisins de classe 1 et 3 de classe 0};
+\end{tikzpicture}
+\caption{Principe du K-NN avec $K = 5$ : le nouvel avis (étoile) est classé selon la majorité de ses cinq plus proches voisins (données synthétiques).}\label{fig:knn}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Hyperparamètres.} Le nombre de voisins $K$, la pondération des voisins et la métrique de distance. Un $K$ petit donne un modèle très flexible (variance élevée, surapprentissage) ; un $K$ grand lisse la frontière (biais élevé).
+\item \textbf{Mise à l'échelle indispensable.} Les distances mélangent toutes les colonnes : sans standardisation, une variable de grande amplitude écrase les autres.
+\item \textbf{Malédiction de la dimension.} Dans un espace de plus de dix mille colonnes, les distances entre points tendent à se ressembler, et la notion de \gl{plus proche voisin} perd de son pouvoir discriminant. Pour des vecteurs TF-IDF normalisés en norme L2, la distance euclidienne au carré vaut $2(1 - \cos\theta)$ : distance euclidienne et distance cosinus classent alors les voisins de la même façon.
+\item \textbf{Coût.} Il n'y a pas d'entraînement, mais chaque prédiction exige de comparer l'avis à tous ceux de l'entraînement, ce qui est coûteux pour un grand jeu et de grandes dimensions.
+\end{itemize}
+
+\subsection{Arbre de décision (Decision Tree)}
+L'arbre de décision CART (Breiman et al., 1984) partitionne récursivement l'espace des variables par des tests simples (\gl{le terme \textit{perfect} a-t-il un poids supérieur à un seuil ?}). À chaque n\oe ud, l'algorithme choisit la variable et le seuil qui réduisent le plus l'\textbf{impureté} des n\oe uds enfants. Pour un n\oe ud $t$ contenant la proportion $p_k$ d'individus de la classe $k$, deux mesures d'impureté sont courantes, l'indice de Gini et l'entropie :
+\begin{align}
+G(t) &= 1 - \sum_k p_k^2 \qquad\qquad H(t) = -\sum_k p_k \log_2 p_k \label{eq:gini}\\
+\Delta I &= I(t) - \sum_{c\in\{\text{gauche},\,\text{droite}\}} \frac{n_c}{n_t}\, I(c) \label{eq:gain}
+\end{align}
+Le gain d'information $\Delta I$ mesure la baisse d'impureté obtenue par un découpage, $I$ désignant $G$ ou $H$. À titre d'illustration, avec les proportions 82,2\,\% / 17,8\,\% du projet, le n\oe ud racine a pour impureté de Gini 0,29 et pour entropie 0,68 bit (Figure~\ref{fig:gini}) ; une feuille parfaitement pure aurait une impureté nulle. La prédiction d'une feuille est la classe majoritaire de ses individus.
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.72\textwidth,height=6.2cm,xmin=0,xmax=1,ymin=0,ymax=1.05,grid=major,grid style={gray!20},
+  xlabel={Proportion $p$ de la classe 1 dans le n\oe ud},ylabel={Impureté},
+  legend style={at={(0.03,0.97)},anchor=north west,draw=none,fill=white,font=\sffamily\tiny,legend cell align=left}]
+\addplot[rose,thick,domain=0.0005:0.9995,samples=200]{-(x*ln(x)+(1-x)*ln(1-x))/ln(2)};\addlegendentry{Entropie (bits)}
+\addplot[azur,thick,domain=0:1,samples=100]{2*x*(1-x)};\addlegendentry{Indice de Gini}
+\addplot[only marks,mark=*,mark size=2.2pt,rose] coordinates{(0.822,0.6756)};
+\addplot[only marks,mark=*,mark size=2.2pt,azur] coordinates{(0.822,0.2926)};
+\draw[ardoise,thin] (axis cs:0.60,0.17) -- (axis cs:0.815,0.285);
+\node[font=\sffamily\tiny,text=azur,align=left,anchor=east] at (axis cs:0.60,0.17) {n\oe ud racine du projet\\$p = 0{,}822 \rightarrow$ Gini $= 0{,}29$\\entropie $= 0{,}68$};
+\end{axis}
+\end{tikzpicture}
+\caption{Indice de Gini et entropie d'un n\oe ud binaire en fonction de la proportion $p$ de la classe 1 ; le point correspond au n\oe ud racine du projet.}\label{fig:gini}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Hyperparamètres.} Profondeur maximale, nombre minimal d'individus par feuille ou par découpage, critère (Gini ou entropie), paramètre d'élagage. Un arbre trop profond mémorise l'entraînement ; l'\textit{élagage} limite sa complexité.
+\item \textbf{Atouts.} Interprétabilité (les règles se lisent), insensibilité à l'échelle des variables, acceptation des matrices creuses.
+\item \textbf{Limites.} Forte variance (un petit changement des données peut produire un arbre très différent). Face à des milliers de variables textuelles faiblement informatives, chaque découpage n'utilise qu'un seul terme : un arbre unique combine mal beaucoup de signaux faibles, ce qui explique son retrait relatif dans les résultats.
+\end{itemize}
+
+\subsection{Forêt aléatoire (Random Forest)}
+La forêt aléatoire (Breiman, 2001) combine $B$ arbres entraînés chacun sur un échantillon bootstrap du jeu d'entraînement (tirage avec remise, ce qui retient environ 63\,\% d'individus distincts) et, à chaque n\oe ud, sur un sous-ensemble aléatoire de variables (\code{max_features}). La prédiction est le vote majoritaire des arbres. L'agrégation réduit la variance : si les arbres ont chacun une variance $\sigma^2$ et une corrélation moyenne $\rho$, la variance de leur moyenne vaut
+\begin{equation}\label{eq:varrf}
+\mathrm{Var}(\bar{f}_B) = \rho\,\sigma^2 + \frac{1-\rho}{B}\,\sigma^2
+\end{equation}
+Lorsque $B$ est grand, le second terme disparaît : seule compte la corrélation $\rho$ entre arbres, que le tirage aléatoire des variables sert précisément à diminuer. Les individus laissés de côté par chaque bootstrap (environ 37\,\%) fournissent une estimation interne de l'erreur dite \textit{out-of-bag}.
+\begin{itemize}
+\item \textbf{Hyperparamètres.} Nombre d'arbres, profondeur maximale, nombre de variables considérées par n\oe ud, taille minimale des feuilles.
+\item \textbf{Atouts.} Très robuste, peu sensible au surapprentissage, fournit des importances de variables, accepte les matrices creuses.
+\item \textbf{Limites.} Modèle volumineux (plusieurs dizaines à centaines d'arbres) et plus lent à entraîner et à interroger qu'un modèle linéaire ; sur du texte, où l'information est répartie sur de très nombreux termes faibles, il est en général moins bien adapté qu'un modèle linéaire.
+\end{itemize}
+
+\subsection{Naïve Bayes multinomial}
+Le classifieur de Bayes naïf applique le théorème de Bayes en supposant les variables \textbf{conditionnellement indépendantes} sachant la classe. Dans sa version multinomiale (McCallum et Nigam, 1998), un document $d$ est décrit par les effectifs $n_{w,d}$ de chaque mot $w$, et la classe prédite maximise la log-vraisemblance :
+\begin{equation}\label{eq:nb}
+\hat{c} = \arg\max_{c}\Bigl[\log P(c) + \sum_{w\in V} n_{w,d}\,\log P(w\mid c)\Bigr]
+\end{equation}
+Les probabilités $P(w \mid c)$ sont estimées sur l'entraînement avec un \textbf{lissage de Laplace} (ou de Lidstone) de paramètre $\alpha$, qui évite qu'un mot absent d'une classe ne reçoive une probabilité nulle et n'annule tout le produit :
+\begin{equation}\label{eq:laplace}
+P(w\mid c) = \frac{N_{w,c} + \alpha}{N_c + \alpha\lvert V\rvert}
+\end{equation}
+où $N_{w,c}$ est le poids total du mot $w$ dans les documents de la classe $c$, $N_c$ le poids total de la classe et $\lvert V\rvert$ la taille du vocabulaire. Les poids TF-IDF, bien que non entiers, jouent très bien le rôle d'effectifs dans cette formule.
+\begin{itemize}
+\item \textbf{Hyperparamètre.} Le paramètre de lissage $\alpha$ : proche de 0, le modèle colle aux données ; grand, il tire toutes les probabilités vers l'uniforme.
+\item \textbf{Atouts.} Extrêmement rapide, peu gourmand en données, bon point de départ pour la classification de texte.
+\item \textbf{Limites.} L'hypothèse d'indépendance est irréaliste (les mots d'un avis sont corrélés) et les probabilités produites sont mal calibrées. Le modèle exige aussi des \textbf{entrées positives} : la représentation qui lui est fournie doit être compatible avec cette contrainte, alors que les colonnes standardisées contiennent des valeurs négatives.
+\end{itemize}
+
+\subsection{SVM linéaire (Linear SVC)}
+Le séparateur à vaste marge (SVM, Cortes et Vapnik, 1995) cherche l'hyperplan $w\cdot x + b = 0$ qui sépare les deux classes avec la \textbf{marge} la plus grande, \ie{} la plus grande distance entre l'hyperplan et les points les plus proches (les \textit{vecteurs de support}, Figure~\ref{fig:svm}). La marge vaut $2/\lVert w\rVert$. Lorsque les classes ne sont pas parfaitement séparables, la version à marge souple autorise des erreurs mesurées par des variables d'écart $\xi_i$, pénalisées avec un poids $C$ (les étiquettes sont notées $y_i \in \{-1, +1\}$) :
+\begin{equation}\label{eq:svm}
+\min_{w,b,\xi}\ \frac{1}{2}\lVert w\rVert^2 + C\sum_{i=1}^{n}\xi_i \quad\text{avec}\quad y_i\,(w\cdot x_i + b) \geq 1 - \xi_i,\ \ \xi_i \geq 0
+\end{equation}
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=0.95cm,y=0.9cm]
+\draw[ardoise!30,thin] (0,0) rectangle (8.8,7.4);
+\begin{scope}\clip (0,0) rectangle (8.8,7.4);
+\draw[navy,thick] (12.76,-3.66) -- (-5.25,12.19);
+\draw[navy,dashed] (11.93,-4.61) -- (-6.09,11.25);
+\draw[navy,dashed] (13.60,-2.71) -- (-4.42,13.14);
+\end{scope}
+\foreach \x/\y in {2.54/3.56, 3.91/1.69, 2.16/1.67, 3.16/2.14, 3.36/0.35, 4.30/2.10, 3.28/2.06, 2.06/2.66, 3.45/2.00, 2.32/2.89, 1.50/0.69, 2.95/1.53, 1.96/1.01, 0.78/2.24, 3.53/1.97}{\fill[rose] (\x,\y) circle (2.3pt);}
+\foreach \x/\y in {5.54/5.68, 7.22/5.00, 7.03/6.34, 6.16/4.49, 6.80/5.55, 7.66/4.02, 5.64/4.46, 4.41/5.43, 7.01/4.56, 7.99/6.12, 7.12/5.70, 7.50/3.97, 7.11/5.90, 4.37/5.65, 6.11/6.08}{\fill[azur] (\x,\y) circle (2.3pt);}
+\draw[black,thick] (2.54,3.56) circle (4.2pt);
+\draw[black,thick] (4.30,2.10) circle (4.2pt);
+\draw[black,thick] (5.64,4.46) circle (4.2pt);
+\draw[black,thick] (4.41,5.43) circle (4.2pt);
+\draw[black,thick] (4.37,5.65) circle (4.2pt);
+\fill[rose] (0.45,6.85) circle (2.3pt);\node[font=\sffamily\scriptsize,anchor=west] at (0.7,6.85) {classe 0};
+\fill[azur] (0.45,6.40) circle (2.3pt);\node[font=\sffamily\scriptsize,anchor=west] at (0.7,6.40) {classe 1};
+\draw[black,thick] (0.45,5.95) circle (4.2pt);\node[font=\sffamily\scriptsize,anchor=west] at (0.7,5.95) {vecteurs de support};
+\end{tikzpicture}
+\caption{Principe du SVM linéaire : hyperplan séparateur (trait plein), marges (pointillés) et vecteurs de support entourés (données synthétiques).}\label{fig:svm}
+\end{figure}
+
+Un grand $C$ punit sévèrement les erreurs (marge étroite, risque de surapprentissage) ; un petit $C$ tolère davantage d'erreurs au profit d'une marge large (modèle plus régularisé). La prédiction repose sur la fonction de décision $f(x) = w\cdot x + b$, dont le signe donne la classe et dont la valeur absolue mesure l'éloignement de l'hyperplan.
+
+L'implémentation \code{LinearSVC} de scikit-learn s'appuie sur la bibliothèque LIBLINEAR (Fan et al., 2008), conçue pour les problèmes linéaires de grande taille. Elle utilise par défaut une pénalité L2 et la perte \gl{hinge au carré} (\code{squared_hinge}) ; son coût croît à peu près linéairement avec le nombre de valeurs non nulles de la matrice.
+\begin{itemize}
+\item \textbf{Pourquoi il convient au texte} (Joachims, 1998). Les représentations TF-IDF vivent dans des espaces de très grande dimension, où les classes sont souvent quasi séparables par un hyperplan ; la plupart des termes sont faiblement mais réellement informatifs, et la matrice est creuse. Un modèle linéaire régularisé tire parti de tous ces signaux simultanément.
+\item \textbf{Noyaux non linéaires.} Les noyaux RBF ou polynomial (\code{SVC}) ont un coût au moins quadratique en nombre d'échantillons et apportent peu quand les données sont déjà quasi séparables : le noyau linéaire est le choix standard pour du texte.
+\item \textbf{Limite.} \code{LinearSVC} ne fournit pas de probabilités calibrées (pas de \code{predict_proba}) : on dispose d'un score de décision, qu'une étape de calibration (\code{CalibratedClassifierCV}) peut convertir en probabilités.
+\end{itemize}
+
+\section{Recherche des hyperparamètres avec GridSearchCV}
+La procédure décrite à la section~\ref{sec:cv} est appliquée à chaque modèle réglable : pour chaque combinaison de la grille, une validation croisée stratifiée sur l'entraînement calcule un score moyen ; la meilleure combinaison est retenue, puis le modèle est ré-entraîné sur tout l'entraînement. Le Tableau~\ref{tab:hyper} liste les hyperparamètres principaux de chaque algorithme, c'est-à-dire ceux sur lesquels porte la recherche, et leur effet.
+
+\begin{ltab}{B{0.20}L{0.32}L{0.48}}{Hyperparamètres principaux de chaque algorithme}{tab:hyper}{\hc{Algorithme}&\hc{Hyperparamètres principaux}&\hc{Effet sur le modèle}}
+K-NN & \code{n_neighbors}, \code{weights}, métrique de distance & $K$ petit : flexible et instable ; $K$ grand : lissé. Pondération par la distance : voisins proches favorisés\\
+Decision Tree & \code{max_depth}, \code{min_samples_leaf}, \code{criterion} & Profondeur et taille des feuilles contrôlent le surapprentissage ; critère Gini ou entropie\\
+Random Forest & \code{n_estimators}, \code{max_depth}, \code{max_features} & Plus d'arbres : variance réduite, coût accru ; \code{max_features} règle la décorrélation des arbres\\
+Multinomial NB & \code{alpha} & Intensité du lissage de Laplace\\
+Linear SVC & \code{C} & Compromis entre largeur de marge et erreurs tolérées\\
+\end{ltab}
+
+Les grilles exactes explorées et les valeurs optimales retenues (attribut \code{best_params_} de chaque recherche) sont consignées dans le notebook 03. Trois remarques de méthode complètent le protocole :
+\begin{itemize}
+\item \textbf{Validation stratifiée.} Avec 17,8\,\% de classe minoritaire, la stratification des plis garantit une estimation stable du score.
+\item \textbf{Coût.} Le temps de calcul est proportionnel à $\lvert\text{grille}\rvert \times K$ ; la forêt aléatoire, qui ajuste de nombreux arbres sur plus de dix mille colonnes, est en général le modèle le plus coûteux à régler, alors que le Naïve Bayes et le Linear SVC sont nettement plus rapides.
+\item \textbf{Étanchéité du test.} Le jeu de test n'intervient à aucun moment de la recherche (section~\ref{sec:cv}).
+\end{itemize}
+
+\section{Sélection du modèle final}\label{sec:select}
+Le \textbf{Linear SVC} est retenu parce qu'il obtient les meilleurs scores sur les trois métriques (chapitre~\ref{chap:resultats}), mais aussi pour des raisons pratiques : il est léger (un vecteur d'environ 13\,000 coefficients), rapide à interroger, bien adapté aux matrices creuses de grande dimension et sa régularisation limite le surapprentissage. Il est sérialisé avec joblib dans \code{models/best_model.pkl}, et le préprocesseur correspondant dans \code{models/preprocessor.pkl}. Le couple modèle-préprocesseur est \textbf{indissociable} : un modèle ne peut recevoir que des données transformées par le préprocesseur avec lequel il a été entraîné.
+
+\section{Synthèse comparative des algorithmes}
+\begin{ltab}[\footnotesize]{B{0.17}L{0.23}L{0.24}L{0.26}C{0.10}}{Synthèse des six approches}{tab:synthese}{\hc{Algorithme}&\hc{Principe}&\hc{Atouts}&\hc{Limites}&\hc{Rang (F1)}}
+Linear SVC & Hyperplan de marge maximale & Adapté au texte creux ; léger ; régularisé & Pas de probabilités calibrées & 1\\
+Random Forest & Vote de nombreux arbres décorrélés & Robuste ; importances de variables & Volumineux ; lent ; moins adapté au texte & 2\\
+Decision Tree & Découpages successifs de l'espace & Lisible ; insensible à l'échelle & Forte variance ; un terme par découpage & 3\\
+K-NN & Vote des $K$ plus proches voisins & Aucun entraînement ; simple & Dimension élevée ; prédiction coûteuse & 4\\
+Multinomial NB & Bayes avec indépendance des mots & Très rapide ; bon baseline texte & Indépendance irréaliste ; entrées positives & 5\\
+Zero-R & Toujours la classe majoritaire & Plancher de référence & Aucune information exploitée & 6\\
+\end{ltab}
+% ============================== CHAPITRE 8 ===================================
+\chapter{Résultats et évaluation}\label{chap:resultats}
+Ce chapitre présente les performances des six approches sur le jeu de test, les interprète avec la prudence que commande l'incertitude d'échantillonnage, analyse la structure des erreurs par classe et positionne le résultat par rapport à des références externes. Tous les chiffres de performance proviennent du README du dépôt ; les valeurs \gl{reconstituées} sont déduites de ces chiffres par un calcul exact présenté à la section~\ref{sec:recon}.
+
+\section{Choix des métriques}
+Avec 82,2\,\% d'avis dans la classe majoritaire, l'accuracy seule est trompeuse : le baseline Zero-R atteint 0,8223 sans rien apprendre. Le projet privilégie donc deux métriques complémentaires. Le \textbf{F1-score} de la classe recommandée résume le compromis précision-rappel ; la \textbf{ROC-AUC} évalue la qualité du classement des avis par le score du modèle, indépendamment du seuil de décision et du déséquilibre (section~\ref{sec:metriques}). L'accuracy est conservée comme repère lisible. Elle est complétée plus loin par les rappels de chaque classe.
+
+\section{Résultats comparatifs sur le jeu de test}
+\begin{ltab}{C{0.10}B{0.30}C{0.20}C{0.20}C{0.20}}{Performances des modèles sur le jeu de test (source : README du dépôt)}{tab:perf}{\hc{Rang}&\hc{Modèle}&\hc{Accuracy}&\hc{F1-score}&\hc{ROC-AUC}}
+1 & Linear SVC & 0,9378 & 0,9622 & 0,9775\\
+2 & Random Forest & 0,9356 & 0,9613 & 0,9730\\
+3 & Decision Tree & 0,9301 & 0,9563 & 0,9684\\
+4 & K-NN & 0,9186 & 0,9519 & 0,9642\\
+5 & Multinomial NB & 0,9052 & 0,9425 & 0,9531\\
+6 & Zero-R & 0,8223 & 0,9025 & N/A\\
+\end{ltab}
+
+Le Linear SVC arrive en tête sur les trois métriques, suivi de la forêt aléatoire, de l'arbre de décision, du K-NN et du Naïve Bayes multinomial. Le baseline Zero-R ferme la marche ; son AUC n'est pas rapportée (\gl{N/A}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar,width=\textwidth,height=7.4cm,bar width=9.5pt,ymin=0.80,ymax=1.045,
+  symbolic x coords={Linear SVC,Random Forest,Decision Tree,KNN,Multinomial NB,Zero-R},xtick=data,enlarge x limits=0.1,
+  x tick label style={font=\sffamily\scriptsize,align=center},ytick={0.80,0.85,0.90,0.95,1.00},
+  ylabel={Score (axe tronqué à partir de 0,80)},
+  legend style={at={(0.5,1.03)},anchor=south,legend columns=-1,draw=none,font=\sffamily\scriptsize,/tikz/every even column/.append style={column sep=6pt}},
+  nodes near coords={\pgfmathprintnumber[fixed,fixed zerofill,precision=4,use comma]{\pgfplotspointmeta}},
+  nodes near coords align={vertical},every node near coord/.append style={rotate=90,anchor=west,font=\sffamily\tiny},
+  y tick label style={/pgf/number format/.cd,fixed,fixed zerofill,precision=2,use comma}]
+\addplot[fill=azur,draw=none] coordinates{(Linear SVC,0.9378)(Random Forest,0.9356)(Decision Tree,0.9301)(KNN,0.9186)(Multinomial NB,0.9052)(Zero-R,0.8223)};
+\addlegendentry{Accuracy}
+\addplot[fill=rose,draw=none] coordinates{(Linear SVC,0.9622)(Random Forest,0.9613)(Decision Tree,0.9563)(KNN,0.9519)(Multinomial NB,0.9425)(Zero-R,0.9025)};
+\addlegendentry{F1-score (classe 1)}
+\addplot[fill=navy,draw=none] coordinates{(Linear SVC,0.9775)(Random Forest,0.9730)(Decision Tree,0.9684)(KNN,0.9642)(Multinomial NB,0.9531)};
+\addlegendentry{ROC-AUC}
+\node[font=\sffamily\tiny,text=ardoise,anchor=south] at ([xshift=12pt]axis cs:Zero-R,0.803) {n.d.};
+\end{axis}
+\end{tikzpicture}
+\caption{Comparaison des modèles sur le jeu de test : accuracy, F1-score et ROC-AUC (axe tronqué à partir de 0,80).}\label{fig:comparaison}
+\end{figure}
+
+\section{Lecture des résultats}\label{sec:lecture}
+\subsection{Apport par rapport au baseline}
+Tous les modèles dépassent nettement le baseline Zero-R, ce qui montre que le texte et les métadonnées portent un véritable signal prédictif. L'accuracy gagne entre 8 et 11,5 points. Le gain en F1 paraît plus modeste (de 0,04 à 0,06) parce que le baseline part déjà d'un F1 élevé de 0,9025, ce qui limite la marge de progression à 0,0975. Une lecture plus parlante est la \textbf{réduction relative du taux d'erreur} : le Linear SVC passe d'un taux d'erreur de 17,77\,\% (baseline) à 6,22\,\%, soit une réduction de 65\,\% (Tableau~\ref{tab:apport}).
+
+\begin{ltab}{B{0.24}C{0.17}C{0.15}C{0.18}C{0.26}}{Apport de chaque modèle par rapport au baseline Zero-R (accuracy 0,8223 ; F1 0,9025)}{tab:apport}{\hc{Modèle}&\hc{Gain d'accuracy (points)}&\hc{Gain de F1}&\hc{Taux d'erreur}&\hc{Réduction relative de l'erreur}}
+Linear SVC & +11,55 & +0,0597 & 6,22\,\% & 65\,\%\\
+Random Forest & +11,33 & +0,0588 & 6,44\,\% & 64\,\%\\
+Decision Tree & +10,78 & +0,0538 & 6,99\,\% & 61\,\%\\
+K-NN & +9,63 & +0,0494 & 8,14\,\% & 54\,\%\\
+Multinomial NB & +8,29 & +0,0400 & 9,48\,\% & 47\,\%\\
+\end{ltab}
+
+\subsection{Écarts entre modèles et incertitude d'échantillonnage}
+Une accuracy mesurée sur un jeu de test fini est une \textit{estimation}. Son erreur-type vaut approximativement
+\begin{equation}\label{eq:se}
+\mathrm{SE} = \sqrt{\frac{\hat{p}\,(1-\hat{p})}{n}}
+\end{equation}
+soit, pour $p = 0{,}9378$ et un jeu de test d'environ 4\,700 avis, 0,35 point d'accuracy (intervalle de confiance à 95\,\% d'environ $\pm$ 0,7 point). Le Tableau~\ref{tab:ecarts} exprime les écarts avec le Linear SVC en nombre d'erreurs-types.
+
+\begin{ltab}{B{0.24}C{0.18}C{0.15}L{0.43}}{Écarts avec le Linear SVC exprimés en erreurs-types (jeu de test supposé de 4\,700 avis)}{tab:ecarts}{\hc{Modèle comparé au Linear SVC}&\hc{Écart d'accuracy (points)}&\hc{En erreurs-types}&\hc{Lecture}}
+Random Forest & 0,22 & 0,6 & Écart non distinguable du bruit d'échantillonnage\\
+Decision Tree & 0,77 & 2,2 & Écart d'environ deux erreurs-types : probable mais à confirmer\\
+K-NN & 1,92 & 5,5 & Écart net\\
+Multinomial NB & 3,26 & 9,3 & Écart très net\\
+\end{ltab}
+
+L'écart entre le Linear SVC et la forêt aléatoire (0,22 point d'accuracy, 0,0009 de F1, 0,0045 d'AUC) est inférieur à une erreur-type : sur ces seules données, les deux modèles sont statistiquement indiscernables. Le choix du Linear SVC s'appuie donc moins sur cet écart que sur son AUC légèrement supérieure et sur ses avantages pratiques (légèreté, rapidité, adaptation aux matrices creuses). Une précision supplémentaire s'impose : les deux modèles étant évalués sur \textit{les mêmes} avis, la variance de leur différence est plus faible que ne le suggère ce calcul ; le test de McNemar, qui exploite cet appariement, serait l'outil adapté (chapitre~\ref{chap:discussion}).
+
+\subsection{Interprétation par famille de modèles}
+\begin{itemize}
+\item \textbf{Forêt aléatoire contre arbre unique.} L'agrégation de nombreux arbres gagne 0,55 point d'accuracy sur l'arbre seul : c'est la réduction de variance attendue (équation~\eqref{eq:varrf}).
+\item \textbf{K-NN.} Il se classe quatrième : dans un espace de plus de dix mille dimensions, les distances perdent leur pouvoir discriminant (section~\ref{sec:algos}).
+\item \textbf{Naïve Bayes multinomial.} Il reste le plus faible des modèles appris, mais conserve une avance de plus de 8 points d'accuracy sur le baseline : l'hypothèse d'indépendance des mots est irréaliste, sans être rédhibitoire pour cette tâche.
+\item \textbf{Qualité du classement (AUC).} Toutes les AUC dépassent 0,95. Pour le Linear SVC, une AUC de 0,9775 signifie qu'un avis recommandé tiré au hasard reçoit un meilleur score qu'un avis non recommandé tiré au hasard dans 97,75\,\% des paires.
+\end{itemize}
+
+\section{Analyse par classe : reconstitution des matrices de confusion}\label{sec:recon}
+Le README ne publie que l'accuracy, le F1-score et l'AUC. Ces trois nombres suffisent pourtant à reconstituer, \textit{exactement} au sens de l'arithmétique, la structure des erreurs de chaque modèle, sous trois hypothèses vérifiables : (i) la classe positive est la classe 1 ; (ii) le F1 rapporté est le F1 binaire de la classe 1, ce que confirme le baseline ($2p/(1 + p) = 0{,}9025$) ; (iii) la proportion de la classe 1 dans le jeu de test est $p = 0{,}8223$, valeur de l'accuracy de Zero-R. Notons $\VP$, $\FP$, $\FN$ et $\VN$ les effectifs exprimés en fraction du jeu de test. Les deux équations $A = \VP + \VN$ et $F_1 = 2\VP/(2\VP + \FP + \FN)$, jointes aux relations $\VP + \FN = p$ et $\VN + \FP = 1 - p$, donnent (démonstration en annexe~\ref{app:derivation}) :
+\begin{equation}\label{eq:recon}
+\VP = \frac{F_1\,(1-A)}{2\,(1-F_1)} \qquad \FP = \VP - (A - 1 + p) \qquad \FN = p - \VP \qquad \VN = 1 - p - \FP
+\end{equation}
+Recalculées à partir de ces effectifs, l'accuracy et le F1 retrouvent par construction les valeurs du README. Comme les métriques publiées sont arrondies à quatre décimales, les valeurs reconstituées sont connues à environ $\pm$ \textbf{0,01} près ; elles sont donc données avec deux décimales et doivent être confirmées par le \textit{classification report} et la matrice de confusion du notebook 03 lorsqu'on les dispose.
+
+\begin{ltab}[\footnotesize]{B{0.19}C{0.13}C{0.12}C{0.15}C{0.12}C{0.13}C{0.16}}{Métriques par classe reconstituées à partir de l'accuracy, du F1 et de $p = 0{,}8223$ (incertitude $\pm$ 0,01)}{tab:parclasse}{\hc{Modèle}&\hc{Précision (cl. 1)}&\hc{Rappel (cl. 1)}&\hc{Spécificité (rappel cl. 0)}&\hc{F1 (cl. 0)}&\hc{Macro-F1}&\hc{Accuracy équilibrée}}
+Linear SVC & 0,96 & 0,96 & 0,82 & 0,82 & 0,89 & 0,89\\
+Random Forest & 0,95 & 0,97 & 0,76 & 0,81 & 0,88 & 0,87\\
+Decision Tree & 0,98 & 0,93 & 0,93 & 0,83 & 0,89 & 0,93\\
+K-NN & 0,93 & 0,98 & 0,64 & 0,74 & 0,84 & 0,81\\
+Multinomial NB & 0,94 & 0,94 & 0,72 & 0,73 & 0,84 & 0,83\\
+Zero-R & 0,82 & 1,00 & 0,00 & 0,00 & 0,45 & 0,50\\
+\end{ltab}
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar,width=\textwidth,height=6.6cm,bar width=14pt,ymin=0,ymax=1.12,
+  symbolic x coords={Linear SVC,Random Forest,Decision Tree,KNN,Multinomial NB,Zero-R},xtick=data,enlarge x limits=0.1,
+  x tick label style={font=\sffamily\scriptsize},ytick={0,0.2,0.4,0.6,0.8,1.0},
+  ylabel={Valeur reconstituée ($\pm$ 0,01)},
+  legend style={at={(0.5,-0.14)},anchor=north,legend columns=1,draw=none,font=\sffamily\scriptsize,legend cell align=left},
+  nodes near coords={\pgfmathprintnumber[fixed,fixed zerofill,precision=2,use comma]{\pgfplotspointmeta}},
+  every node near coord/.append style={font=\sffamily\tiny},
+  y tick label style={/pgf/number format/.cd,fixed,fixed zerofill,precision=1,use comma}]
+\addplot[fill=azur,draw=none] coordinates{(Linear SVC,0.96)(Random Forest,0.97)(Decision Tree,0.93)(KNN,0.98)(Multinomial NB,0.94)(Zero-R,1.00)};
+\addlegendentry{Rappel classe 1 (recommandé)}
+\addplot[fill=rose,draw=none] coordinates{(Linear SVC,0.82)(Random Forest,0.76)(Decision Tree,0.93)(KNN,0.64)(Multinomial NB,0.72)(Zero-R,0.00)};
+\addlegendentry{Rappel classe 0 (non recommandé = spécificité)}
+\end{axis}
+\end{tikzpicture}
+\caption{Rappel de la classe 1 et rappel de la classe 0 (spécificité) de chaque modèle, valeurs reconstituées ($\pm$ 0,01).}\label{fig:rappels}
+\end{figure}
+
+Pour le modèle retenu, la matrice de confusion reconstituée, exprimée en pourcentage du jeu de test, est la suivante (Figure~\ref{fig:confsvc}). Sur un jeu d'environ 4\,700 avis, cela représente de l'ordre de 150 avis recommandés classés à tort comme non recommandés ($\FN$) et autant d'avis non recommandés classés à tort comme recommandés ($\FP$).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[cel/.style={minimum width=3.1cm,minimum height=2.5cm,font=\sffamily\bfseries\small,align=center,inner sep=2pt}]
+\node[cel,fill=azur,text=white] at (0,0) {VP\\79,2\,\%};
+\node[cel,fill=azur!18!white,text=navy] at (3.1,0) {FN\\3,1\,\%};
+\node[cel,fill=azur!18!white,text=navy] at (0,-2.5) {FP\\3,2\,\%};
+\node[cel,fill=azur!62!white,text=white] at (3.1,-2.5) {VN\\14,6\,\%};
+\node[font=\sffamily\scriptsize,anchor=south] at (0,1.3) {Prédit : 1};
+\node[font=\sffamily\scriptsize,anchor=south] at (3.1,1.3) {Prédit : 0};
+\node[font=\sffamily\scriptsize,anchor=east] at (-1.7,0) {Réel : 1};
+\node[font=\sffamily\scriptsize,anchor=east] at (-1.7,-2.5) {Réel : 0};
+\end{tikzpicture}
+\caption{Matrice de confusion reconstituée du Linear SVC, en pourcentage du jeu de test (incertitude d'environ $\pm$ 0,2 point).}\label{fig:confsvc}
+\end{figure}
+
+\subsection{Enseignements}
+\begin{itemize}
+\item \textbf{Le Linear SVC offre le meilleur équilibre.} Précision et rappel de la classe 1 valent environ 0,96, et il détecte environ 82\,\% des avis non recommandés. Autrement dit, environ 18\,\% des avis non recommandés lui échappent : la classe minoritaire reste la plus difficile à repérer.
+\item \textbf{La forêt, le K-NN et le Naïve Bayes sont \gl{optimistes}.} Leur rappel de la classe 1 est très élevé (0,97, 0,98 et 0,94) mais leur spécificité est nettement plus faible (0,76, 0,64 et 0,72) : ils tendent à prédire \gl{recommandé} par défaut, effet typique du déséquilibre. Le K-NN est le cas extrême, avec seulement 64\,\% des non-recommandations détectées.
+\item \textbf{L'arbre de décision a un profil atypique.} Son rappel et sa spécificité sont voisins (environ 0,93 chacun), d'où l'accuracy équilibrée la plus élevée du tableau, et sa précision sur la classe 1 est très haute (0,98). Il est en revanche le moins fiable lorsqu'il annonce \gl{non recommandé} : cette annonce n'est correcte que dans 74\,\% des cas, contre 83\,\% pour le Linear SVC.
+\item \textbf{Aucun modèle n'est meilleur partout.} Le choix du \gl{meilleur} modèle dépend du coût relatif des deux types d'erreur : manquer un avis non recommandé ($\FP$) ou en signaler un à tort ($\FN$).
+\end{itemize}
+Le Tableau~\ref{tab:classements} montre que le classement des modèles dépend de la métrique : le Linear SVC est premier selon le F1, le macro-F1 et l'AUC (où il devance de peu l'arbre de décision en macro-F1, 0,893 contre 0,891, soit un écart inférieur à l'incertitude de la reconstitution), mais c'est l'arbre de décision qui l'emporte en accuracy équilibrée.
+
+\begin{ltab}{C{0.10}L{0.22}L{0.22}L{0.24}L{0.22}}{Classement des cinq modèles appris selon la métrique retenue (valeurs reconstituées pour le macro-F1 et l'accuracy équilibrée)}{tab:classements}{\hc{Rang}&\hc{F1 (classe 1)}&\hc{Macro-F1}&\hc{Accuracy équilibrée}&\hc{ROC-AUC}}
+1 & Linear SVC & Linear SVC & Decision Tree & Linear SVC\\
+2 & Random Forest & Decision Tree & Linear SVC & Random Forest\\
+3 & Decision Tree & Random Forest & Random Forest & Decision Tree\\
+4 & K-NN & K-NN & Multinomial NB & K-NN\\
+5 & Multinomial NB & Multinomial NB & K-NN & Multinomial NB\\
+\end{ltab}
+
+\section{Courbes ROC et AUC}
+L'AUC rend compte du classement produit par chaque modèle, avant toute décision de seuil. Les cinq modèles appris atteignent des AUC comprises entre 0,9531 (Naïve Bayes) et 0,9775 (Linear SVC), \ie{} bien au-dessus de la valeur 0,5 d'un classement aléatoire. L'AUC du Linear SVC se calcule à partir de sa fonction de décision, celle de l'arbre à partir des proportions de classes dans les feuilles (une courbe en escalier, car un arbre ne produit qu'un nombre limité de scores distincts), celle de la forêt à partir de la moyenne des probabilités des arbres. L'AUC étant indépendante du seuil, elle suggère qu'un réglage du seuil de décision pourrait améliorer le rappel de la classe 0 sans changer de modèle, au prix d'une baisse du rappel de la classe 1 : c'est l'une des perspectives du projet.
+
+\section{Positionnement par rapport à des références externes et rôle de la note}\label{sec:ref-ext}
+Les résultats gagnent à être replacés dans le contexte des travaux publiés sur le même jeu de données. Une étude indépendante (McCormick, 2021) rapporte, sur un jeu de test de 2\,350 avis issu d'un autre découpage, les F1-scores du Tableau~\ref{tab:externe}. Ces valeurs ne sont qu'un \textbf{ordre de grandeur} : le jeu de test diffère de celui du projet (sa proportion de classe 1 est d'environ 0,83, contre 0,8223) et l'incertitude d'un F1 mesuré sur 2\,350 avis est de l'ordre de 0,005. Les approches de Deep Learning y figurent uniquement comme repères de comparaison : le projet n'en utilise aucune.
+
+\begin{ltab}{L{0.40}C{0.17}L{0.43}}{F1-scores de références externes et du projet (jeux de test différents : comparaison indicative)}{tab:externe}{\hc{Stratégie}&\hc{F1-score (classe 1)}&\hc{Source}}
+Toujours prédire \gl{recommandé} & 0,906 & Étude externe (test de 2\,350 avis)\\
+Zero-R du projet & 0,9025 & Projet (test d'environ 4\,700 avis)\\
+Règle : recommandé si Rating $\geq$ 3 & 0,953 & Étude externe\\
+Modèle de langage sur le seul texte & 0,945 & Étude externe (référence, hors périmètre du projet)\\
+Arbres boostés sur les variables hors texte & 0,965 & Étude externe\\
+Linear SVC du projet (texte + métadonnées) & 0,9622 & Projet\\
+Modèle de langage sur texte + métadonnées & 0,968 & Étude externe (référence, hors périmètre du projet)\\
+\end{ltab}
+
+Trois conclusions s'en dégagent.
+\begin{enumerate}
+\item \textbf{Le résultat du projet est cohérent avec la littérature.} Un F1 de 0,9622 se situe dans la fourchette publiée (0,945 à 0,968) pour des approches bien plus lourdes : rien n'indique ni sous-performance ni fuite de données.
+\item \textbf{La note concentre l'essentiel du signal.} Une règle triviale (\gl{recommandé si la note est au moins 3}) atteint déjà un F1 de l'ordre de 0,95, et un modèle d'arbres sans aucune variable textuelle atteint 0,965. L'étude citée observe d'ailleurs que presque tous les avis notés de 3 à 5 sont recommandés et presque tous ceux notés 1 ou 2 ne le sont pas. C'est cohérent avec le test de Mann-Whitney du chapitre~\ref{chap:eda}, et cela relativise le gain apporté par le texte sur le seul F1 de la classe 1.
+\item \textbf{L'intérêt du texte est ailleurs.} Il réside dans les cas où la note ne suffit pas à trancher, dans l'explicabilité (les termes les plus discriminants) et surtout dans les situations où la note est absente : le modèle de langage sur le seul texte gagne alors près de 0,04 de F1 sur le baseline. Mesurer cet apport sur le pipeline du projet demanderait une ablation (entraînement sans la variable Rating), que nous proposons en perspective.
+\end{enumerate}
+
+\section{Bilan du chapitre}
+\begin{itemize}
+\item Le Linear SVC est le meilleur modèle (accuracy 0,9378 ; F1 0,9622 ; AUC 0,9775) et réduit de 65\,\% le taux d'erreur du baseline.
+\item L'écart avec la forêt aléatoire est inférieur à l'incertitude d'échantillonnage ; le choix du Linear SVC repose aussi sur des critères pratiques.
+\item L'analyse par classe, reconstituée, montre que la classe minoritaire reste la plus difficile : environ 18\,\% des avis non recommandés échappent au modèle retenu.
+\item La note porte l'essentiel du signal ; mesurer l'apport propre du texte est la prochaine étape naturelle.
+\end{itemize}
+% ============================== CHAPITRE 9 ===================================
+\chapter{Application Streamlit}\label{chap:app}
+Le dernier maillon du pipeline est une application web interactive, \code{src/app.py}, qui permet à une personne non spécialiste de tester le modèle en direct et de consulter les résultats de l'étude. Ce chapitre décrit son architecture, ses six onglets, la chaîne de prédiction et les évolutions envisagées.
+
+\section{Architecture et principes de fonctionnement}
+\textbf{Streamlit} est une bibliothèque Python qui construit une interface web à partir d'un simple script, sans écrire de HTML ni de JavaScript. Son modèle d'exécution est particulier : \textit{à chaque interaction de l'utilisateur (clic, saisie, changement d'onglet), le script est ré-exécuté de haut en bas}. Recharger un modèle depuis le disque à chaque interaction serait donc très coûteux. L'application évite ce piège en chargeant les fichiers \code{models/best_model.pkl} et \code{models/preprocessor.pkl} dans une fonction décorée par \code{@st.cache_resource} : l'objet est conservé en mémoire d'une exécution à l'autre, et le chargement n'a lieu qu'une seule fois (Figure~\ref{fig:streamlit}).
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[bx/.style={box,minimum width=4.3cm,minimum height=1.55cm,text width=4.1cm}]
+\node[bx,boxvert] (a) at (0,0) {\textbf{Formulaire}\\[2pt]département \textperiodcentered\ catégorie\\âge \textperiodcentered\ note \textperiodcentered\ titre \textperiodcentered\ avis};
+\node[bx] (b) at (5.0,0) {\textbf{DataFrame (1 ligne)}\\[2pt]mêmes colonnes que X\\lors de l'entraînement};
+\node[bx,boxrose] (c) at (10.0,0) {\textbf{Transformation}\\[2pt]preprocessor.pkl (imputation,\\scaling, one-hot, TF-IDF)};
+\node[bx] (d) at (0,-3.2) {\textbf{Matrice creuse}\\[2pt]$\approx$ 13\,000 colonnes\\(1 ligne)};
+\node[bx,boxrose] (e) at (5.0,-3.2) {\textbf{Modèle}\\[2pt]best\_model.pkl\\Linear SVC \textperiodcentered\ predict()};
+\node[bx,boxvert] (f) at (10.0,-3.2) {\textbf{Résultat affiché}\\[2pt]Recommandé /\\Non recommandé};
+\draw[flow] (a) -- (b); \draw[flow] (b) -- (c);
+\draw[flow] (c.south) -- ++(0,-0.85) -| (d.north);
+\draw[flow] (d) -- (e); \draw[flow] (e) -- (f);
+\node[font=\ttfamily\scriptsize\itshape,text=ardoise] at (5.0,-5.0) {@st.cache\_resource : chargement unique des fichiers .pkl, réutilisés à chaque interaction};
+\end{tikzpicture}
+\caption{Chaîne de traitement de l'application : du formulaire à la prédiction affichée.}\label{fig:streamlit}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Chemins robustes.} L'application résout le dossier \code{models/} à partir de l'emplacement du script, avec \code{Path(__file__).resolve().parents[1]} : \code{parents[0]} désigne le dossier \code{src/} et \code{parents[1]} la racine du projet. Elle fonctionne ainsi quel que soit le répertoire depuis lequel elle est lancée, sans configuration manuelle.
+\item \textbf{Cohérence modèle-préprocesseur.} Le modèle et le préprocesseur sont chargés ensemble : le modèle n'a de sens que sur des données transformées par le préprocesseur avec lequel il a été entraîné (section~\ref{sec:select}).
+\item \textbf{Thème visuel.} Les couleurs (rose poudré, fond clair) sont définies dans \code{src/config.toml}.
+\end{itemize}
+
+\section{Les six onglets}
+L'interface est organisée en six onglets, décrits dans le Tableau~\ref{tab:onglets}.
+
+\begin{ltab}{C{0.07}B{0.24}L{0.69}}{Les six onglets de l'application}{tab:onglets}{\hc{N\textsuperscript{o}}&\hc{Onglet}&\hc{Contenu}}
+1 & Accueil & Présentation du projet, de son objectif et de la démarche\\
+2 & Prédiction en direct & Saisie d'un profil (département, catégorie, âge, note, avis) et prédiction en temps réel par \code{model.predict()} sur les données transformées par \code{preprocessor.pkl}\\
+3 & Performance des modèles & Tableau comparatif des modèles et graphique du F1-score\\
+4 & Statistiques du dataset & Répartition de la variable cible et répartition par département\\
+5 & Découvertes clés & Synthèse des enseignements : déséquilibre des classes, modèle champion, limites de l'arbre de décision, apport du réglage des hyperparamètres\\
+6 & À propos & Stack technique et avertissement académique\\
+\end{ltab}
+
+\section{Chaîne de prédiction en direct}
+L'onglet \gl{Prédiction en direct} est le c\oe ur fonctionnel de l'application. Il suit toujours la même séquence :
+\begin{enumerate}
+\item l'utilisatrice renseigne le formulaire : département, catégorie de produit, âge, note et texte de l'avis ;
+\item les valeurs sont assemblées en un DataFrame d'une ligne dont les colonnes reprennent le schéma des variables explicatives de l'entraînement ;
+\item le préprocesseur applique exactement les mêmes transformations que lors de l'apprentissage (imputation, standardisation, encodage one-hot, TF-IDF avec le vocabulaire et les idf de l'entraînement) et produit une matrice creuse d'une ligne ;
+\item le Linear SVC calcule sa fonction de décision et renvoie la classe prédite via \code{model.predict()} ;
+\item l'interface affiche le résultat (\gl{recommandé} ou \gl{non recommandé}).
+\end{enumerate}
+Deux points techniques méritent d'être soulignés. D'abord, le préprocesseur attend toutes les colonnes du schéma d'entraînement : les variables que le formulaire ne demande pas (par exemple le titre ou le nombre de retours positifs) doivent être complétées par des valeurs neutres avant la transformation, ce que les imputeurs et le traitement du texte vide rendent possible. Ensuite, le Linear SVC n'expose pas \code{predict_proba} : il fournit un score de décision, dont le signe donne la classe. L'affichage d'un score de confiance suppose donc d'exploiter ce score (distance à l'hyperplan) ou de calibrer le modèle (section~\ref{sec:perspectives}).
+
+\begin{calloutnote}{Cohérence entraînement-service}
+Une erreur classique en production est le \textit{training-serving skew} : appliquer à l'application des transformations légèrement différentes de celles de l'entraînement. En sérialisant le préprocesseur ajusté et en le rechargeant tel quel, le projet élimine ce risque.
+\end{calloutnote}
+
+\section{Exécution et déploiement}
+Après installation des dépendances, l'application se lance depuis la racine du projet avec la commande suivante ; Streamlit ouvre alors l'interface dans le navigateur.
+\begin{codebox}
+\begin{Verbatim}[fontsize=\small]
+pip install -r requirements.txt
+streamlit run src/app.py
+\end{Verbatim}
+\end{codebox}
+L'exécution locale est la modalité retenue, conformément au cahier des charges, pour lequel le déploiement en ligne est optionnel. Les fichiers \code{.pkl} étant versionnés dans \code{models/}, l'application démarre immédiatement après le clonage, sans avoir à réexécuter les notebooks.
+
+\section{Évolutions envisagées}
+L'application remplit son rôle de démonstration. Plusieurs évolutions la rapprocheraient d'un véritable outil d'aide à la décision et des exigences complètes du cahier des charges :
+\begin{itemize}
+\item \textbf{Dashboard d'exploration complet.} Le cahier des charges prévoit six éléments minimaux : tableau de statistiques descriptives, informations sur les valeurs manquantes, distributions des variables numériques (histogrammes et KDE), fréquences des variables catégorielles, matrice de corrélation et au moins un filtre interactif. L'onglet \gl{Statistiques du dataset} couvre aujourd'hui la répartition de la cible et par département ; le compléter est la suite logique.
+\item \textbf{Score de confiance.} Afficher la distance à l'hyperplan, ou une probabilité calibrée (\code{CalibratedClassifierCV}), pour que l'utilisatrice sache si une prédiction est tranchée ou proche de la frontière.
+\item \textbf{Explicabilité.} Mettre en évidence les termes qui ont le plus pesé dans la décision, grâce aux coefficients du Linear SVC. Un LLM pourrait aussi rédiger une explication en langage naturel, ce que le cahier des charges autorise comme outil applicatif, à condition que le moteur de prédiction reste un modèle de Machine Learning classique.
+\item \textbf{Captures d'écran et déploiement.} Documenter l'interface dans le rapport et, si souhaité, la publier en ligne.
+\end{itemize}
+
+% ============================== CHAPITRE 10 ==================================
+\chapter{Discussion, limites et perspectives}\label{chap:discussion}
+Ce chapitre prend du recul : il confronte les résultats aux questions posées en introduction, recense les limites du travail avec les mesures correctives correspondantes, puis propose des perspectives classées par intérêt.
+
+\section{Retour sur les questions du projet}
+\begin{ltab}{L{0.27}L{0.55}L{0.18}}{Réponses aux cinq questions du projet}{tab:questions}{\hc{Question posée}&\hc{Réponse apportée}&\hc{Chapitre}}
+1. Quelles variables sont liées à la recommandation ? & La note (test de Mann-Whitney U) et le département (test du $\chi^2$) sont étudiés ; la note concentre l'essentiel du signal, comme le confirment les références externes. & chapitres~\ref{chap:eda}, \ref{chap:resultats}\\
+2. Comment combiner des variables hétérogènes sans fuite de données ? & ColumnTransformer en trois branches, ajusté sur l'entraînement seul. Une fuite mineure subsiste dans la validation croisée (préprocesseur ajusté avant celle-ci), sans effet sur le jeu de test. & chapitre~\ref{chap:prep}\\
+3. Quel algorithme offre le meilleur compromis ? & Le Linear SVC (accuracy 0,9378 ; F1 0,9622 ; AUC 0,9775), indiscernable de la forêt aléatoire à l'incertitude près mais plus léger et mieux adapté aux matrices creuses. & chapitres~\ref{chap:modeles}, \ref{chap:resultats}\\
+4. Comment évaluer honnêtement avec 82,2\,\% de classe majoritaire ? & Baseline Zero-R, F1 et AUC, analyse par classe : la classe minoritaire reste la plus difficile (rappel d'environ 0,82). & chapitre~\ref{chap:resultats}\\
+5. Comment rendre le modèle utilisable ? & Application Streamlit à six onglets ; modèle et préprocesseur sérialisés et rechargés tels quels. & chapitre~\ref{chap:app}\\
+\end{ltab}
+
+\section{Limites du travail}
+\begin{ltab}[\footnotesize]{B{0.22}L{0.42}L{0.36}}{Limites identifiées et mesures correctives}{tab:limites}{\hc{Limite}&\hc{Explication}&\hc{Mesure envisagée}}
+Langue unique & Les avis sont en anglais ; un texte dans une autre langue produirait des vecteurs presque vides (mots hors vocabulaire). & Prédictions fiables en anglais uniquement ; extension multilingue\\
+Déséquilibre des classes & 82,2\,\% / 17,8\,\% ; le modèle retenu détecte environ 82\,\% des non-recommandations. & Pondération des classes, ré-échantillonnage, réglage du seuil\\
+Poids dominant de la note & Une règle fondée sur la seule note atteint un F1 de l'ordre de 0,95 dans les références externes. & Ablation sans Rating pour mesurer l'apport propre du texte\\
+Sac de mots & Le TF-IDF ignore l'ordre des mots, la négation et l'ironie. & $n$-grammes ; réglage de la vectorisation\\
+Un seul découpage train/test & Erreur-type d'environ 0,35 point sur l'accuracy : les écarts inférieurs ne sont pas concluants. & Validation croisée répétée, intervalles de confiance par bootstrap, test de McNemar\\
+Préprocesseur ajusté avant la validation croisée & Les plis de validation influencent légèrement les idf et les moyennes. & Intégrer le préprocesseur dans un Pipeline passé à GridSearchCV\\
+Pas de probabilités calibrées & LinearSVC ne fournit qu'un score de décision. & Calibration ; score de confiance dans l'application\\
+SVM limité au noyau linéaire & Les noyaux RBF et polynomial ne figurent pas dans la comparaison. & Comparer SVC à noyaux non linéaires, avec un budget de calcul adapté\\
+Représentativité & Un seul détaillant, une seule langue, une seule période. & Valider sur d'autres sources avant tout usage réel\\
+Équité & L'âge est une variable explicative du modèle. & Mesurer les performances par tranche d'âge\\
+\end{ltab}
+
+\section{Perspectives}\label{sec:perspectives}
+Les perspectives sont classées par rapport entre effort et bénéfice attendu. Elles respectent le cadre du cahier des charges : seuls des algorithmes de Machine Learning classique sont envisagés comme modèles prédictifs.
+
+\begin{ltab}[\footnotesize]{C{0.09}L{0.50}L{0.41}}{Perspectives classées par priorité}{tab:perspectives}{\hc{Priorité}&\hc{Action}&\hc{Bénéfice attendu}}
+1 & Régler le seuil de décision et tester la pondération des classes (\code{class_weight}) & Meilleur rappel de la classe \gl{non recommandé}, au prix d'une baisse maîtrisée de celui de la classe 1\\
+2 & Mener des ablations : sans la variable Rating, puis sans le texte & Quantifier l'apport propre du texte et celui des métadonnées\\
+3 & Exporter et analyser les matrices de confusion et les classification reports ; examiner des avis mal classés & Remplacer les valeurs reconstituées par les valeurs exactes et comprendre les erreurs\\
+4 & Placer le préprocesseur dans un Pipeline ; validation croisée répétée ; test de McNemar & Supprimer la fuite mineure et départager rigoureusement les modèles proches\\
+5 & Enrichir le TF-IDF : $n$-grammes (1 à 2), \code{min_df}, pondération sous-linéaire & Capter la négation et les expressions figées (\gl{not good}, \gl{runs small})\\
+6 & Tester d'autres algorithmes classiques : régression logistique, gradient boosting, SVC à noyaux non linéaires & Probabilités natives (régression logistique) ; couverture complète du périmètre du cours\\
+7 & Afficher un score de confiance calibré et les termes les plus influents dans l'application & Confiance et explicabilité des prédictions\\
+8 & Compléter le dashboard d'exploration (six éléments du cahier des charges) & Exploration interactive complète des données\\
+9 & Étendre à d'autres langues ; déployer l'application en ligne & Généralisation et accessibilité\\
+\end{ltab}
+
+\section{Responsabilité et usage}
+Le modèle déduit la classe d'opinion la plus plausible à partir de signaux linguistiques et de métadonnées ; il ne juge ni une cliente ni un produit. Son usage doit rester celui d'un outil d'aide à l'analyse d'avis, avec une supervision humaine, et être précédé d'une validation sur les données réelles de l'organisation qui l'emploierait. Comme tout modèle entraîné sur des textes d'un seul public, il peut refléter les biais de cette population (section~\ref{sec:ethique}).
+
+% ============================== CHAPITRE 11 ==================================
+\chapter{Conclusion}\label{chap:conclusion}
+Ce projet a conduit un pipeline de Data Mining de bout en bout, des 23\,486 avis bruts du jeu \textit{Women's E-Commerce Clothing Reviews} jusqu'à une application Streamlit capable de prédire en direct si une cliente recommande un article. Il répond au cahier des charges du parcours A : un jeu de données de volumétrie suffisante, une exploration documentée, deux tests statistiques justifiés, un prétraitement sans fuite de données, la comparaison de six approches de Machine Learning classique avec optimisation systématique des hyperparamètres, et un dépôt GitHub structuré.
+
+Sur le plan des résultats, le Linear SVC s'impose avec une accuracy de 0,9378, un F1-score de 0,9622 et une ROC-AUC de 0,9775, soit une réduction de 65\,\% du taux d'erreur par rapport au baseline Zero-R. La reconstitution des métriques par classe apporte un éclairage complémentaire : le modèle détecte environ 82\,\% des avis non recommandés, la classe minoritaire restant la plus difficile à repérer. La mise en perspective avec des travaux externes montre que le résultat est cohérent avec l'état de l'art sur ce jeu de données, et que la note concentre l'essentiel du signal.
+
+Sur le plan méthodologique, le projet illustre quatre enseignements : (1) un baseline trivial est indispensable pour apprécier la valeur ajoutée d'un modèle, surtout sur des classes déséquilibrées ; (2) l'accuracy seule ne suffit pas, et le choix du \gl{meilleur} modèle dépend de la métrique et du coût des erreurs ; (3) un écart de performance doit toujours être comparé à l'incertitude d'échantillonnage ; (4) la reproductibilité (versions figées, graines aléatoires, découpage stratifié, artefacts sérialisés) est une exigence scientifique autant que technique.
+
+Les prolongements les plus prometteurs sont le réglage du seuil de décision et la pondération des classes pour mieux détecter les non-recommandations, les ablations pour mesurer l'apport propre du texte, l'enrichissement du TF-IDF par des $n$-grammes, et la complétion de l'application (score de confiance, explicabilité, dashboard d'exploration complet). Ces pistes s'inscrivent toutes dans le cadre du Machine Learning classique retenu pour ce mini-projet.
+
+% ============================== RÉFÉRENCES ===================================
+\starchapter{Références bibliographiques}
+\begingroup\small
+\begin{list}{}{\setlength{\leftmargin}{1.5em}\setlength{\itemindent}{-1.5em}\setlength{\itemsep}{4pt}\setlength{\parsep}{0pt}\setlength{\topsep}{0pt}}
+\item Breiman, L. (2001). Random forests. \textit{Machine Learning}, 45(1), 5--32.
+\item Breiman, L., Friedman, J., Olshen, R. et Stone, C. (1984). \textit{Classification and Regression Trees}. Wadsworth.
+\item Brooks, N. (2018). \textit{Women's E-Commerce Clothing Reviews} [jeu de données]. Kaggle. \url{https://www.kaggle.com/datasets/nicapotato/womens-ecommerce-clothing-reviews}
+\item Chapman, P., Clinton, J., Kerber, R., Khabaza, T., Reinartz, T., Shearer, C. et Wirth, R. (2000). \textit{CRISP-DM 1.0: Step-by-step data mining guide}. SPSS Inc.
+\item Chawla, N. V., Bowyer, K. W., Hall, L. O. et Kegelmeyer, W. P. (2002). SMOTE: Synthetic minority over-sampling technique. \textit{Journal of Artificial Intelligence Research}, 16, 321--357.
+\item Cortes, C. et Vapnik, V. (1995). Support-vector networks. \textit{Machine Learning}, 20(3), 273--297.
+\item Cover, T. et Hart, P. (1967). Nearest neighbor pattern classification. \textit{IEEE Transactions on Information Theory}, 13(1), 21--27.
+\item Fan, R.-E., Chang, K.-W., Hsieh, C.-J., Wang, X.-R. et Lin, C.-J. (2008). LIBLINEAR: A library for large linear classification. \textit{Journal of Machine Learning Research}, 9, 1871--1874.
+\item Fawcett, T. (2006). An introduction to ROC analysis. \textit{Pattern Recognition Letters}, 27(8), 861--874.
+\item Joachims, T. (1998). Text categorization with support vector machines: Learning with many relevant features. \textit{Proceedings of ECML-98}, Lecture Notes in Computer Science 1398, 137--142. Springer.
+\item Mann, H. B. et Whitney, D. R. (1947). On a test of whether one of two random variables is stochastically larger than the other. \textit{The Annals of Mathematical Statistics}, 18(1), 50--60.
+\item McCallum, A. et Nigam, K. (1998). A comparison of event models for Naive Bayes text classification. \textit{AAAI-98 Workshop on Learning for Text Categorization}, 41--48.
+\item McCormick, C. (2021). \textit{Combining categorical and numerical features with text in BERT}. \url{https://mccormickml.com/2021/06/29/combining-categorical-numerical-features-with-bert}
+\item OpenML (s. d.). \textit{Women's E-Commerce Clothing Reviews}, jeu de données n\textsuperscript{o}~43673 (valeurs distinctes et manquantes). \url{https://api.openml.org/d/43673}
+\item Pearson, K. (1900). On the criterion that a given system of deviations from the probable in the case of a correlated system of variables is such that it can be reasonably supposed to have arisen from random sampling. \textit{Philosophical Magazine}, 50(302), 157--175.
+\item Pedregosa, F. et al. (2011). Scikit-learn: Machine learning in Python. \textit{Journal of Machine Learning Research}, 12, 2825--2830.
+\item Salton, G. et Buckley, C. (1988). Term-weighting approaches in automatic text retrieval. \textit{Information Processing \& Management}, 24(5), 513--523.
+\item Tukey, J. W. (1977). \textit{Exploratory Data Analysis}. Addison-Wesley.
+\item Documentation de scikit-learn, \url{https://scikit-learn.org} ; documentation de Streamlit, \url{https://docs.streamlit.io} ; documentation de SciPy, \url{https://docs.scipy.org} (consultées pour les paramètres et le comportement des implémentations).
+\end{list}
+\endgroup
+% ============================== ANNEXES ======================================
+\appendix
+\chapter{Procédure de reproduction pas à pas}\label{app:repro}
+Cette annexe détaille la procédure à suivre pour régénérer l'ensemble du projet à partir du dépôt. Prérequis : Python 3, Git et un accès au fichier \code{reviews.csv} (jeu Kaggle).
+
+\section{Installation de l'environnement}
+\begin{codebox}
+\begin{Verbatim}[fontsize=\fontsize{6.8}{8.4}\selectfont]
+git clone https://github.com/RSD018/Prediction-des-recommandations--dachats--de-vetements--pour--femmes.git
+\end{Verbatim}
+\end{codebox}
+\begin{codebox}
+\begin{Verbatim}[fontsize=\fontsize{7.6}{9.2}\selectfont]
+cd Prediction-des-recommandations--dachats--de-vetements--pour--femmes
+python -m venv venv
+source venv/bin/activate        # Windows : venv\Scripts\activate
+pip install -r requirements.txt
+\end{Verbatim}
+\end{codebox}
+Le dossier créé par \code{git clone} porte le nom du dépôt ; c'est dans ce dossier que se placent toutes les commandes suivantes. L'installation depuis \code{requirements.txt} fige les versions exactes des bibliothèques, ce qui garantit la compatibilité des fichiers \code{.pkl}.
+
+\section{Régénération des données et des modèles}
+\begin{enumerate}
+\item Placer \code{reviews.csv} dans \code{data/raw/}.
+\item Lancer JupyterLab (\code{jupyter lab}) et exécuter, dans l'ordre et en entier, \code{01_eda_and_cleaning.ipynb}, puis \code{02_preprocessing_encoding.ipynb}, puis \code{03_classification_models.ipynb}.
+\item Vérifier la présence des fichiers produits (Tableau~\ref{tab:fichiersnb}).
+\item Lancer l'application : \code{streamlit run src/app.py}.
+\end{enumerate}
+
+\begin{ltab}{L{0.20}L{0.38}L{0.42}}{Fichiers produits par chaque notebook et contrôles de cohérence}{tab:fichiersnb}{\hc{Après le notebook}&\hc{Fichier attendu}&\hc{Contrôle rapide}}
+01 & \path{data/processed/reviews_clean.csv} & Le fichier existe ; il compte pratiquement autant de lignes que le jeu brut\\
+02 & \path{models/preprocessor.pkl} (+ vectoriseurs TF-IDF) & Les fichiers existent ; la matrice d'entraînement compte environ 13\,000 colonnes\\
+03 & \path{models/best_model.pkl} & Le tableau de résultats retrouve le Linear SVC en tête (accuracy 0,9378)\\
+\end{ltab}
+
+\begin{calloutwarn}{Si les résultats diffèrent légèrement}
+Des écarts de dernière décimale peuvent apparaître si les versions de bibliothèques diffèrent de celles de \code{requirements.txt}, ou si un modèle à composante aléatoire est exécuté sans la graine \code{random_state=42}. Réinstaller l'environnement depuis \code{requirements.txt} est la première vérification à faire.
+\end{calloutwarn}
+
+\chapter{Dérivation des métriques reconstituées}\label{app:derivation}
+Cette annexe démontre les formules de la section~\ref{sec:recon}. Toutes les grandeurs $\VP$, $\FP$, $\FN$ et $\VN$ sont exprimées en fraction du jeu de test (leur somme vaut 1). On note $A$ l'accuracy, $F_1$ le F1-score de la classe 1 et $p$ la proportion de la classe 1 dans le jeu de test.
+
+\section{Hypothèses et relations de départ}
+\begin{itemize}
+\item La classe positive est la classe 1, de proportion $p = \VP + \FN$ ; la classe 0 a pour proportion $1 - p = \VN + \FP$.
+\item L'accuracy est la part des prédictions correctes : $A = \VP + \VN$, donc \textbf{le taux d'erreur vaut $\FP + \FN = 1 - A$}.
+\item Le F1-score de la classe 1 vaut $F_1 = 2\VP / (2\VP + \FP + \FN)$.
+\end{itemize}
+
+\section{Démonstration}
+\textbf{Étape 1.} Réécrivons la définition du $F_1$ pour isoler $\FP + \FN$ :
+\begin{equation}\label{eq:b1}
+F_1 = \frac{2\VP}{2\VP + \FP + \FN} \;\Rightarrow\; \FP + \FN = \frac{2\VP\,(1 - F_1)}{F_1}
+\end{equation}
+\textbf{Étape 2.} Or $\FP + \FN = 1 - A$. En égalant les deux expressions, on isole $\VP$ :
+\begin{equation}\label{eq:b2}
+1 - A = \frac{2\VP\,(1 - F_1)}{F_1} \;\Rightarrow\; \VP = \frac{F_1\,(1 - A)}{2\,(1 - F_1)}
+\end{equation}
+\textbf{Étape 3.} Les autres effectifs s'en déduisent par les relations de départ :
+\begin{equation}\label{eq:b3}
+\FN = p - \VP \qquad \FP = (1 - A) - \FN = \VP - (A - 1 + p) \qquad \VN = 1 - p - \FP
+\end{equation}
+\textbf{Vérification sur le baseline Zero-R.} Il prédit toujours la classe 1, donc $A = p$ et $F_1 = 2p/(1 + p)$, d'où $1 - F_1 = (1 - p)/(1 + p)$. La formule donne $\VP = [2p/(1 + p)]\,(1 - p) / [2(1 - p)/(1 + p)] = p$, puis $\FN = 0$ et $\FP = 1 - p$ : c'est bien le comportement attendu (aucun avis non recommandé détecté).
+
+\section{Application numérique au Linear SVC}
+\begin{ltab}{B{0.26}L{0.54}C{0.20}}{Reconstitution détaillée de la matrice de confusion du Linear SVC}{tab:reconsvc}{\hc{Grandeur}&\hc{Calcul}&\hc{Valeur}}
+VP & $0{,}9622 \times (1 - 0{,}9378) / [2 \times (1 - 0{,}9622)]$ & 0,7917\\
+FN & $p - \mathit{VP} = 0{,}8223 - 0{,}7917$ & 0,0306\\
+FP & $\mathit{VP} - (A - 1 + p) = 0{,}7917 - (0{,}9378 - 1 + 0{,}8223)$ & 0,0316\\
+VN & $1 - p - \mathit{FP} = 1 - 0{,}8223 - 0{,}0316$ & 0,1461\\
+Précision (cl. 1) & $\mathit{VP} / (\mathit{VP} + \mathit{FP})$ & 0,9617\\
+Rappel (cl. 1) & $\mathit{VP} / p$ & 0,9627\\
+Spécificité (rappel cl. 0) & $\mathit{VN} / (1 - p)$ & 0,8224\\
+\end{ltab}
+
+\section{Incertitude due à l'arrondi}
+Les métriques du README sont arrondies à $10^{-4}$, donc connues à $\pm\,5 \times 10^{-5}$. La propagation de cette incertitude à $\VP$ passe par les dérivées partielles :
+\begin{equation}\label{eq:b4}
+\frac{\partial \VP}{\partial F_1} = \frac{1 - A}{2\,(1 - F_1)^2} \qquad\qquad \frac{\partial \VP}{\partial A} = -\frac{F_1}{2\,(1 - F_1)}
+\end{equation}
+Pour le Linear SVC, ces dérivées valent 21,8 et $-12{,}7$ : l'erreur maximale sur $\VP$ est donc de $(21{,}8 + 12{,}7) \times 5 \times 10^{-5} \approx 1{,}7 \times 10^{-3}$ (soit 0,17 point de pourcentage). L'erreur sur $\FP$ est du même ordre. Rapportée à la proportion de la classe 0 ($1 - p = 0{,}1777$), elle conduit à une incertitude d'environ 0,010 sur la spécificité, tandis que le rappel et la précision, calculés sur des effectifs plus grands, sont connus à moins de 0,003. C'est ce qui justifie l'incertitude de $\pm$ 0,01 annoncée pour l'ensemble des valeurs reconstituées, qui est une borne supérieure.
+
+\chapter{Glossaire}\label{app:glossaire}
+\begin{ltab}{B{0.24}L{0.76}}{Glossaire des termes techniques}{tab:glossaire}{\hc{Terme}&\hc{Définition}}
+Accuracy & Part des prédictions correctes sur l'ensemble des observations.\\
+AUC (ROC-AUC) & Aire sous la courbe ROC ; probabilité qu'un exemple positif reçoive un score supérieur à celui d'un exemple négatif.\\
+Baseline & Modèle de référence très simple (ici Zero-R) servant de plancher de comparaison.\\
+Bag-of-words & Représentation d'un texte par les effectifs de ses mots, sans tenir compte de leur ordre.\\
+ColumnTransformer & Objet scikit-learn appliquant des transformations différentes à des groupes de colonnes puis assemblant les résultats.\\
+CRISP-DM & Méthode de référence en six phases pour conduire un projet de fouille de données.\\
+EDA & Analyse exploratoire des données : description, visualisation et diagnostic de qualité avant modélisation.\\
+F1-score & Moyenne harmonique de la précision et du rappel.\\
+Fuite de données & Influence, directe ou indirecte, du jeu de test sur l'apprentissage ou le prétraitement.\\
+GridSearchCV & Recherche exhaustive des hyperparamètres par validation croisée sur une grille de valeurs.\\
+Hyperparamètre & Réglage fixé avant l'apprentissage ($K$, profondeur, $C$, $\alpha$\ldots) qui pilote la complexité du modèle.\\
+IQR & Écart interquartile $Q_3 - Q_1$ ; base de la règle de Tukey pour les valeurs atypiques.\\
+joblib & Bibliothèque Python utilisée pour sérialiser et recharger les modèles et les préprocesseurs.\\
+KDE & Estimation de densité par noyau ; version lissée de l'histogramme.\\
+Matrice creuse & Matrice dont la plupart des valeurs sont nulles ; seules les valeurs non nulles sont stockées.\\
+One-hot & Encodage d'une variable catégorielle en colonnes binaires, une par modalité.\\
+p-valeur & Probabilité d'observer un résultat au moins aussi extrême si l'hypothèse nulle était vraie.\\
+Précision & Parmi les exemples prédits positifs, part de ceux qui le sont réellement.\\
+Rappel (sensibilité) & Parmi les exemples réellement positifs, part de ceux qui sont détectés.\\
+Spécificité & Parmi les exemples réellement négatifs, part de ceux qui sont détectés ; rappel de la classe 0.\\
+Stratification & Découpage conservant, dans chaque sous-ensemble, les proportions de classes du jeu complet.\\
+Surapprentissage & Le modèle mémorise le bruit de l'entraînement et généralise mal à de nouvelles données.\\
+TF-IDF & Pondération d'un terme par sa fréquence dans le document, atténuée par sa fréquence dans le corpus.\\
+Validation croisée & Évaluation répétée où chaque sous-ensemble sert tour à tour de validation, les autres servant à l'apprentissage.\\
+Z-score & Valeur centrée et réduite : $(x - \text{moyenne}) / \text{écart-type}$.\\
+\end{ltab}
+\end{document}
