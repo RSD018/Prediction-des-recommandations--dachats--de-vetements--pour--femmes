@@ -7,6 +7,8 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 from sklearn.metrics import precision_recall_curve, roc_auc_score, roc_curve
+from scipy import stats as scipy_stats
+from sklearn.feature_extraction.text import CountVectorizer
 
 
 try:
@@ -312,6 +314,777 @@ def load_resources():
 
 model, preprocessor = load_resources()
 
+# ==============================================================================
+# >>> DÉBUT DU BLOC AJOUTÉ : tableau de bord statistique + analyses détaillées
+# Uniquement des définitions (aucune page n'est affichée ici) : les pages « Statistiques du Dataset » et
+# « Performance des Modèles » les appellent plus bas. Les noms sont préfixés eda_ / _res_ / DASH_ pour ne
+# jamais entrer en collision avec les variables des autres pages (ex. `cramers_v` et `fmt_p` existent déjà
+# dans la page « Tests d'hypothèses »). Les données lues : data/, models/ensemble_test_scores.csv, reports/, docs/figures/.
+# ==============================================================================
+
+# --- Tableau de bord statistique interactif (page « Statistiques du Dataset ») ---
+EDA_TARGET = "Recommended IND"
+EDA_LABEL = "Recommandation"
+EDA_YES, EDA_NO = "Recommandé", "Non recommandé"
+EDA_NUMERIC = ["Age", "Rating", "Positive Feedback Count", "Review Length"]
+EDA_CATEGORICAL = ["Department Name", "Division Name", "Class Name"]
+DASH_PINK, DASH_PURPLE, DASH_GREY = "#D81B60", "#6A1B9A", "#8A6B78"
+EDA_COLOR = alt.Scale(domain=[EDA_YES, EDA_NO], range=[DASH_PINK, DASH_PURPLE])
+
+
+# --------------------------------------------------------------------------- #
+# Fonctions pures (testables sans Streamlit)
+# --------------------------------------------------------------------------- #
+def eda_prepare(df: pd.DataFrame) -> pd.DataFrame:
+    """Ajoute la longueur des avis (en mots) et une étiquette lisible de la cible."""
+    d = df.copy()
+    words = d["Review Text"].astype(str).str.split().str.len().fillna(0)
+    d["Review Length"] = words.astype(int)
+    d[EDA_LABEL] = d[EDA_TARGET].map({1: EDA_YES, 0: EDA_NO})
+    return d
+
+
+def eda_wilson_interval(successes, n, z: float = 1.96):
+    """Intervalle de confiance de Wilson pour une proportion (robuste aux petits effectifs)."""
+    successes, n = np.asarray(successes, dtype=float), np.asarray(n, dtype=float)
+    n_safe = np.where(n == 0, 1, n)
+    p = successes / n_safe
+    denom = 1 + z**2 / n_safe
+    centre = (p + z**2 / (2 * n_safe)) / denom
+    half = z * np.sqrt(p * (1 - p) / n_safe + z**2 / (4 * n_safe**2)) / denom
+    return np.clip(centre - half, 0, 1), np.clip(centre + half, 0, 1)
+
+
+def eda_tukey_summary(series: pd.Series) -> dict:
+    """Résumé de Tukey : quartiles, moustaches (dernières valeurs dans les clôtures) et valeurs atypiques."""
+    s = series.dropna()
+    q1, med, q3 = s.quantile([0.25, 0.5, 0.75])
+    iqr = q3 - q1
+    low_fence, high_fence = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    inside = s[(s >= low_fence) & (s <= high_fence)]
+    return {
+        "q1": float(q1), "median": float(med), "q3": float(q3),
+        "low": float(inside.min()), "high": float(inside.max()),
+        "low_fence": float(low_fence), "high_fence": float(high_fence),
+        "n_outliers": int(len(s) - len(inside)), "n": int(len(s)),
+    }
+
+
+def eda_histogram_frame(d: pd.DataFrame, var: str, bins: int, by_target: bool, clip_p99: bool) -> pd.DataFrame:
+    """Histogramme pré-calculé : une ligne par (classe, intervalle).
+
+    Variable discrète à peu de valeurs (ex. Rating = 1..5) : une barre par valeur, centrée dessus.
+    """
+    values = d[var]
+    groups = [(EDA_YES, d[d[EDA_TARGET] == 1]), (EDA_NO, d[d[EDA_TARGET] == 0])] if by_target else [("Tous les avis", d)]
+    discrete = values.nunique() <= 12 and bool(np.all(values.dropna() == np.round(values.dropna())))
+    if discrete:
+        levels = np.sort(values.dropna().unique())
+        edges = np.concatenate([levels - 0.45, [levels[-1] + 0.45]])
+        rows = []
+        for name, sub in groups:
+            counts = sub[var].value_counts().reindex(levels, fill_value=0).to_numpy()
+            rows.append(pd.DataFrame({"start": levels - 0.45, "end": levels + 0.45, "Effectif": counts, EDA_LABEL: name}))
+        return pd.concat(rows, ignore_index=True)
+
+    upper = values.quantile(0.99) if clip_p99 else values.max()
+    lo = float(values.min())
+    hi = float(upper) if float(upper) > lo else lo + 1.0
+    edges = np.linspace(lo, hi, bins + 1)
+    rows = []
+    for name, sub in groups:
+        counts, _ = np.histogram(sub[var][sub[var] <= upper], bins=edges)
+        rows.append(pd.DataFrame({"start": edges[:-1], "end": edges[1:], "Effectif": counts, EDA_LABEL: name}))
+    return pd.concat(rows, ignore_index=True)
+
+
+def eda_category_table(d: pd.DataFrame, var: str) -> pd.DataFrame:
+    """Effectif, taux de recommandation et intervalle de Wilson à 95 % par modalité."""
+    g = d.groupby(var)[EDA_TARGET].agg(["sum", "count"]).reset_index()
+    g.columns = [var, "Recommandés", "Effectif"]
+    low, high = eda_wilson_interval(g["Recommandés"], g["Effectif"])
+    g["Taux (%)"] = (g["Recommandés"] / g["Effectif"] * 100).round(1)
+    g["IC95 bas (%)"] = (low * 100).round(1)
+    g["IC95 haut (%)"] = (high * 100).round(1)
+    return g.sort_values("Effectif", ascending=False).reset_index(drop=True)
+
+
+def eda_cramers_v(table: pd.DataFrame) -> tuple[float, float, float, int]:
+    """χ² d'indépendance + V de Cramér (taille d'effet). Retourne (χ², p, V, ddl)."""
+    chi2, p, dof, _ = scipy_stats.chi2_contingency(table.to_numpy())
+    n = table.to_numpy().sum()
+    k = min(table.shape) - 1
+    v = float(np.sqrt(chi2 / (n * k))) if n and k > 0 else float("nan")
+    return float(chi2), float(p), v, int(dof)
+
+
+def eda_mann_whitney(d: pd.DataFrame, var: str) -> dict | None:
+    """Mann-Whitney U (recommandé vs non recommandé) + corrélation bisériale par rangs."""
+    a = d.loc[d[EDA_TARGET] == 1, var].dropna()
+    b = d.loc[d[EDA_TARGET] == 0, var].dropna()
+    if len(a) < 2 or len(b) < 2:
+        return None
+    u, p = scipy_stats.mannwhitneyu(a, b, alternative="two-sided")
+    r = 2 * u / (len(a) * len(b)) - 1  # >0 : les « recommandé » ont des valeurs plus élevées
+    return {"U": float(u), "p": float(p), "r": float(r), "n1": len(a), "n0": len(b),
+            "median1": float(a.median()), "median0": float(b.median())}
+
+
+def eda_fmt_p(p: float) -> str:
+    """Affichage d'une p-value sans « 0.00e+00 » trompeur quand elle sous-dépasse la précision machine."""
+    return "< 1e-300" if p < 1e-300 else f"{p:.2e}"
+
+
+def eda_effect_label(value: float, kind: str = "r") -> str:
+    """Seuils usuels de Cohen (0,1 / 0,3 / 0,5) pour r de corrélation par rangs et le V de Cramér."""
+    v = abs(value)
+    return "négligeable" if v < 0.1 else "faible" if v < 0.3 else "moyen" if v < 0.5 else "fort"
+
+
+@st.cache_data(show_spinner="Analyse du vocabulaire…")
+def eda_discriminating_words(texts: pd.Series, y: pd.Series, ngram: int, min_count: int, top: int):
+    """Mots/expressions les plus associés à « recommandé » ou « non recommandé » (log-odds lissé, classés par z).
+
+    Présence/absence du mot dans l'avis (document frequency), pas de fréquence brute :
+    un mot répété 10 fois dans un seul avis ne domine pas le classement.
+    """
+    vec = CountVectorizer(stop_words="english", ngram_range=(1, ngram), min_df=min_count, binary=True, max_features=20000)
+    X = vec.fit_transform(texts.astype(str))
+    yes = np.asarray(y == 1)
+    n1, n0 = int(yes.sum()), int((~yes).sum())
+    if n1 == 0 or n0 == 0:
+        return None
+    df1 = np.asarray(X[yes].sum(axis=0)).ravel()
+    df0 = np.asarray(X[~yes].sum(axis=0)).ravel()
+    a = 0.5
+    log_odds = np.log((df1 + a) / (n1 - df1 + a)) - np.log((df0 + a) / (n0 - df0 + a))
+    # écart-type du log-odds ratio : on classe par z = log-odds / écart-type pour privilégier les mots à la fois
+    # discriminants ET assez fréquents (un mot vu 30 fois ne doit pas dominer un mot vu 3 000 fois)
+    se = np.sqrt(1 / (df1 + a) + 1 / (n1 - df1 + a) + 1 / (df0 + a) + 1 / (n0 - df0 + a))
+    out = pd.DataFrame({"Mot": vec.get_feature_names_out(), "Avis « recommandé »": df1, "Avis « non recommandé »": df0,
+                        "Log-odds": log_odds.round(3), "z": (log_odds / se).round(2)})
+    out[EDA_LABEL] = np.where(out["Log-odds"] > 0, EDA_YES, EDA_NO)
+    pos = out.nlargest(top, "z")
+    neg = out.nsmallest(top, "z")
+    return pd.concat([pos, neg]).reset_index(drop=True), out
+
+
+# --------------------------------------------------------------------------- #
+# Filtres
+# --------------------------------------------------------------------------- #
+def _eda_filters(d: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    st.markdown("##### 🎛️ Filtres — ils pilotent tous les onglets")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        depts = sorted(d["Department Name"].unique())
+        chosen = st.multiselect("Département", depts, default=depts, key="eda_dept")
+    with c2:
+        lo, hi = int(d["Age"].min()), int(d["Age"].max())
+        age = st.slider("Âge", lo, hi, (lo, hi), key="eda_age")
+    with c3:
+        rating = st.slider("Note", 1, 5, (1, 5), key="eda_rating")
+    with c4:
+        reco = st.selectbox("Recommandation", ["Toutes", EDA_YES, EDA_NO], key="eda_reco")
+
+    out = d[d["Department Name"].isin(chosen) & d["Age"].between(*age) & d["Rating"].between(*rating)]
+    if reco != "Toutes":
+        out = out[out[EDA_LABEL] == reco]
+    active = []
+    if len(chosen) != len(depts):
+        active.append(f"départements : {', '.join(chosen) if chosen else 'aucun'}")
+    if age != (lo, hi):
+        active.append(f"âge {age[0]}–{age[1]}")
+    if rating != (1, 5):
+        active.append(f"note {rating[0]}–{rating[1]}")
+    if reco != "Toutes":
+        active.append(reco.lower())
+    return out, active
+
+
+# --------------------------------------------------------------------------- #
+# Onglets
+# --------------------------------------------------------------------------- #
+def _eda_tab_overview(d: pd.DataFrame) -> None:
+    st.markdown("#### Statistiques descriptives")
+    desc = d[EDA_NUMERIC].describe(percentiles=[0.25, 0.5, 0.75]).T
+    desc["asymétrie"] = d[EDA_NUMERIC].skew()
+    desc["aplatissement"] = d[EDA_NUMERIC].kurt()
+    desc["% atypiques (Tukey)"] = [
+        round(eda_tukey_summary(d[c])["n_outliers"] / len(d) * 100, 1) for c in EDA_NUMERIC
+    ]
+    desc = desc.rename(columns={"count": "n", "mean": "moyenne", "std": "écart-type", "25%": "Q1", "50%": "médiane", "75%": "Q3"})
+    st.dataframe(desc.round(2))
+    skewed = desc["asymétrie"].abs().idxmax()
+    st.caption(
+        f"Lecture : la variable la plus asymétrique est **{skewed}** (asymétrie = {desc.loc[skewed, 'asymétrie']:.2f}). "
+        "Une forte asymétrie et des valeurs atypiques justifient les tests non paramétriques et la normalisation avant les modèles."
+    )
+    with st.expander("Variables catégorielles"):
+        st.dataframe(d[EDA_CATEGORICAL].describe().T.rename(columns={"count": "n", "unique": "modalités", "top": "modalité la plus fréquente", "freq": "effectif"}))
+    with st.expander("Aperçu et export des données filtrées"):
+        cols = ["Clothing ID", "Age", "Rating", EDA_LABEL, "Positive Feedback Count", "Department Name", "Class Name", "Title", "Review Text"]
+        st.dataframe(d[[c for c in cols if c in d.columns]].head(200), hide_index=True)
+        st.download_button("⬇️ Télécharger la sélection (CSV)", d.drop(columns=[EDA_LABEL]).to_csv(index=False).encode("utf-8"),
+                           file_name="avis_filtres.csv", mime="text/csv")
+
+
+def _eda_tab_quality(raw: pd.DataFrame | None, clean: pd.DataFrame) -> None:
+    st.markdown("#### Qualité des données (avant nettoyage)")
+    src = raw if raw is not None else clean.replace("", np.nan)
+    src = src.drop(columns=[c for c in ["Unnamed: 0"] if c in src.columns])
+    miss = src.isna().sum().rename("Manquantes").to_frame()
+    miss["% du dataset"] = (miss["Manquantes"] / len(src) * 100).round(2)
+    miss = miss.reset_index().rename(columns={"index": "Variable"})
+
+    c1, c2 = st.columns([1, 1.4])
+    with c1:
+        st.dataframe(miss, hide_index=True)
+        n_dup = int(len(src) - len(clean))
+        st.metric("Lignes supprimées au nettoyage", f"{n_dup:,}".replace(",", " "),
+                  help="Doublons exacts et lignes à cible manquante retirés lors du nettoyage.")
+    with c2:
+        chart = (
+            alt.Chart(miss).mark_bar(color=DASH_PINK)
+            .encode(x=alt.X("% du dataset:Q", title="% de valeurs manquantes"),
+                    y=alt.Y("Variable:N", sort="-x", title=None),
+                    tooltip=["Variable", "Manquantes", "% du dataset"])
+            .properties(height=280)
+        )
+        st.altair_chart(chart)
+    worst = miss.sort_values("Manquantes", ascending=False).iloc[0]
+    st.caption(
+        f"Calculé sur le dataset brut ({len(src):,} lignes). Variable la plus touchée : **{worst['Variable']}** "
+        f"({worst['% du dataset']:.1f} %). Les textes manquants sont remplacés par une chaîne vide, les catégories par « Unknown »."
+        .replace(",", " ")
+    )
+
+
+def _eda_tab_distributions(d: pd.DataFrame) -> None:
+    c1, c2, c3, c4 = st.columns([1.3, 1, 1, 1])
+    with c1:
+        var = st.selectbox("Variable numérique", EDA_NUMERIC, key="eda_num_var")
+    with c2:
+        bins = st.slider("Classes (bins)", 5, 60, 25, key="eda_bins", disabled=(var == "Rating"), help="Sans effet pour Rating : une barre par note.")
+    with c3:
+        by_target = st.checkbox("Séparer par recommandation", value=True, key="eda_by_target")
+    with c4:
+        clip = st.checkbox("Couper au 99ᵉ centile", value=var in ("Positive Feedback Count", "Review Length"), key="eda_clip")
+    log_y = st.checkbox("Axe vertical logarithmique", value=False, key="eda_logy")
+
+    hist = eda_histogram_frame(d, var, bins, by_target, clip)
+    y_scale = alt.Scale(type="symlog") if log_y else alt.Scale(zero=True)
+    hist["base"] = 0
+    base = alt.Chart(hist).mark_bar(opacity=0.8 if by_target else 1)
+    enc = dict(
+        x=alt.X("start:Q", title=var), x2="end:Q",
+        y=alt.Y("Effectif:Q", stack=None, scale=y_scale, title="Effectif"), y2="base:Q",
+        tooltip=[EDA_LABEL, alt.Tooltip("start:Q", title="de", format=".1f"), alt.Tooltip("end:Q", title="à", format=".1f"), "Effectif"],
+    )
+    enc["color"] = alt.Color(f"{EDA_LABEL}:N", scale=EDA_COLOR) if by_target else alt.value(DASH_PINK)
+    st.altair_chart(base.encode(**enc).properties(height=340, title=f"Distribution de « {var} »"))
+
+    # Boîte à moustaches de Tukey par classe, calculée à la main (aucune donnée brute envoyée)
+    rows = []
+    for name, code in ((EDA_YES, 1), (EDA_NO, 0)):
+        sub = d.loc[d[EDA_TARGET] == code, var]
+        if len(sub):
+            rows.append({EDA_LABEL: name, **eda_tukey_summary(sub)})
+    if rows:
+        box = pd.DataFrame(rows)
+        y = alt.Y(f"{EDA_LABEL}:N", title=None, axis=alt.Axis(labelLimit=220))
+        whisk = alt.Chart(box).mark_rule(strokeWidth=2).encode(y=y, x=alt.X("low:Q", title=var), x2="high:Q", color=alt.Color(f"{EDA_LABEL}:N", scale=EDA_COLOR, legend=None))
+        body = alt.Chart(box).mark_bar(size=26, opacity=0.7).encode(y=y, x="q1:Q", x2="q3:Q", color=alt.Color(f"{EDA_LABEL}:N", scale=EDA_COLOR, legend=None),
+                                                                      tooltip=[EDA_LABEL, "q1", "median", "q3", "n_outliers"])
+        mid = alt.Chart(box).mark_tick(color="white", thickness=3, size=26).encode(y=y, x="median:Q")
+        st.altair_chart((whisk + body + mid).properties(height=230, title="Boîte à moustaches de Tukey (clôtures à 1,5 × IQR)"))
+        out_txt = " · ".join(f"{r[EDA_LABEL]} : {r['n_outliers']} valeur(s) atypique(s) sur {r['n']}" for r in rows)
+        st.caption(f"Médianes — " + " ; ".join(f"{r[EDA_LABEL]} = {r['median']:g}" for r in rows) + f". {out_txt}.")
+
+
+def _eda_tab_categories(d: pd.DataFrame) -> None:
+    var = st.selectbox("Variable catégorielle", EDA_CATEGORICAL, key="eda_cat_var")
+    tab = eda_category_table(d, var)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.altair_chart(
+            alt.Chart(tab).mark_bar(color=DASH_PINK)
+            .encode(x=alt.X("Effectif:Q"), y=alt.Y(f"{var}:N", sort="-x", title=None, axis=alt.Axis(labelOverlap=False, labelLimit=200)),
+                    tooltip=[var, "Effectif", "Taux (%)"])
+            .properties(height=max(200, 44 * len(tab) + 60), title="Fréquence des modalités")
+        )
+    with c2:
+        y = alt.Y(f"{var}:N", sort=alt.EncodingSortField("Effectif", order="descending"), title=None,
+                  axis=alt.Axis(labelOverlap=False, labelLimit=200))
+        bars = alt.Chart(tab).mark_bar(color=DASH_PURPLE, opacity=0.8).encode(
+            x=alt.X("Taux (%):Q", scale=alt.Scale(domain=[0, 100]), title="Taux de recommandation (%)"), y=y,
+            tooltip=[var, "Effectif", "Taux (%)", "IC95 bas (%)", "IC95 haut (%)"])
+        ci = alt.Chart(tab).mark_rule(color="#2D1420", strokeWidth=2).encode(y=y, x="IC95 bas (%):Q", x2="IC95 haut (%):Q")
+        st.altair_chart((bars + ci).properties(height=max(200, 44 * len(tab) + 60), title="Taux de recommandation et IC à 95 % (Wilson)"))
+    st.dataframe(tab, hide_index=True)
+    wide = tab[tab["Effectif"] >= 30]
+    if len(wide) >= 2:
+        best, worst = wide.loc[wide["Taux (%)"].idxmax()], wide.loc[wide["Taux (%)"].idxmin()]
+        st.caption(
+            f"Lecture : parmi les modalités ayant au moins 30 avis, **{best[var]}** est la plus recommandée ({best['Taux (%)']:.1f} %) "
+            f"et **{worst[var]}** la moins recommandée ({worst['Taux (%)']:.1f} %). Une barre d'erreur très large signale un échantillon trop petit pour conclure."
+        )
+
+    st.markdown("#### Note donnée × recommandation")
+    ct = pd.crosstab(d["Rating"], d[EDA_LABEL]).reindex(columns=[EDA_YES, EDA_NO], fill_value=0)
+    long = ct.reset_index().melt(id_vars="Rating", var_name=EDA_LABEL, value_name="Effectif")
+    long["% de la note"] = (long["Effectif"] / long.groupby("Rating")["Effectif"].transform("sum").replace(0, np.nan) * 100).round(1)
+    st.altair_chart(
+        alt.Chart(long).mark_bar().encode(
+            x=alt.X("Rating:O", title="Note", axis=alt.Axis(labelAngle=0)), y=alt.Y("Effectif:Q", stack="normalize", axis=alt.Axis(format="%"), title="Part des avis"),
+            color=alt.Color(f"{EDA_LABEL}:N", scale=EDA_COLOR), tooltip=["Rating", EDA_LABEL, "Effectif", "% de la note"],
+        ).properties(height=260)
+    )
+
+
+def _eda_tab_correlations(d: pd.DataFrame) -> None:
+    method = st.radio("Méthode", ["pearson", "spearman"], horizontal=True, key="eda_corr_method",
+                      format_func=lambda m: {"pearson": "Pearson (linéaire)", "spearman": "Spearman (rangs)"}[m])
+    cols = ["Age", "Rating", "Positive Feedback Count", "Review Length", EDA_TARGET]
+    if len(d) < 3 or d[cols].nunique().min() < 2:
+        st.info("Pas assez de variabilité dans la sélection pour calculer des corrélations (élargissez les filtres).")
+        return
+    corr = d[cols].corr(method=method)
+    long = corr.reset_index().melt(id_vars="index")
+    long.columns = ["x", "y", "corr"]
+    base = alt.Chart(long).encode(x=alt.X("x:N", title=None, axis=alt.Axis(labelLimit=200)), y=alt.Y("y:N", title=None, axis=alt.Axis(labelLimit=200)))
+    heat = base.mark_rect().encode(color=alt.Color("corr:Q", scale=alt.Scale(domain=[-1, 1], scheme="redblue"), title="r"),
+                                   tooltip=["x", "y", alt.Tooltip("corr:Q", format=".3f")])
+    text = base.mark_text(fontSize=13).encode(text=alt.Text("corr:Q", format=".2f"),
+                                              color=alt.condition(alt.datum.corr > 0.6, alt.value("white"), alt.value("black")))
+    c1, c2 = st.columns([1.3, 1])
+    with c1:
+        st.altair_chart((heat + text).properties(height=360))
+    with c2:
+        tgt = corr[EDA_TARGET].drop(EDA_TARGET).rename("r").reset_index().rename(columns={"index": "Variable"})
+        tgt["|r|"] = tgt["r"].abs()
+        st.altair_chart(
+            alt.Chart(tgt).mark_bar().encode(
+                x=alt.X("r:Q", scale=alt.Scale(domain=[-1, 1]), title=f"Corrélation avec « {EDA_TARGET} »"),
+                y=alt.Y("Variable:N", sort="-x", title=None, axis=alt.Axis(labelLimit=200)),
+                color=alt.condition(alt.datum.r > 0, alt.value(DASH_PINK), alt.value(DASH_PURPLE)),
+                tooltip=["Variable", alt.Tooltip("r:Q", format=".3f")],
+            ).properties(height=220)
+        )
+        top = tgt.sort_values("|r|", ascending=False).iloc[0]
+        st.caption(f"**{top['Variable']}** est la variable la plus liée à la recommandation (r = {top['r']:.2f}). "
+                   "Une corrélation forte avec la cible est un signal prédictif… mais aussi un risque de fuite si la variable est connue trop tard.")
+
+
+def _eda_tab_text(d: pd.DataFrame) -> None:
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        ngram = st.radio("Unité", [1, 2], horizontal=True, format_func=lambda n: "mots" if n == 1 else "mots + bigrammes", key="eda_ngram")
+    with c2:
+        min_count = st.slider("Présent dans au moins … avis", 5, 300, 50, key="eda_min_count")
+    with c3:
+        top = st.slider("Nombre de mots par côté", 5, 25, 12, key="eda_top_words")
+
+    has_text = d["Review Text"].astype(str).str.strip().ne("")
+    sub = d[has_text]
+    if len(sub) < 50 or sub[EDA_TARGET].nunique() < 2:
+        st.info("Il faut au moins 50 avis contenant du texte et les deux classes pour comparer le vocabulaire (élargissez les filtres).")
+        return
+    texts = (sub["Title"].astype(str) + " " + sub["Review Text"].astype(str))
+    res = eda_discriminating_words(texts, sub[EDA_TARGET], ngram, min_count, top)
+    if res is None:
+        return
+    top_df, full = res
+    st.altair_chart(
+        alt.Chart(top_df).mark_bar().encode(
+            x=alt.X("Log-odds:Q", title="← plus associé à « non recommandé »      plus associé à « recommandé » →"),
+            y=alt.Y("Mot:N", sort=alt.EncodingSortField("Log-odds", order="descending"), title=None, axis=alt.Axis(labelOverlap=False, labelLimit=200)),
+            color=alt.Color(f"{EDA_LABEL}:N", scale=EDA_COLOR, legend=None),
+            tooltip=["Mot", "Avis « recommandé »", "Avis « non recommandé »", "Log-odds", "z"],
+        ).properties(height=max(360, 26 * len(top_df) + 60), title="Vocabulaire le plus discriminant (classé par z du log-odds)")
+    )
+    st.caption("Un log-odds de +1 signifie que le mot apparaît environ 2,7 fois plus (en proportion d'avis) chez les recommandées. "
+               "C'est exactement le signal que TF-IDF + SVM linéaire exploitent.")
+
+    st.markdown("#### Longueur des avis")
+    hist = eda_histogram_frame(d, "Review Length", 30, True, True)
+    hist["base"] = 0
+    st.altair_chart(
+        alt.Chart(hist).mark_bar(opacity=0.8).encode(
+            x=alt.X("start:Q", title="Longueur de l'avis (mots, coupé au 99ᵉ centile)"), x2="end:Q",
+            y=alt.Y("Effectif:Q", stack=None, title="Effectif"), y2="base:Q", color=alt.Color(f"{EDA_LABEL}:N", scale=EDA_COLOR), tooltip=[EDA_LABEL, "Effectif"],
+        ).properties(height=300)
+    )
+    with st.expander("Tableau complet des mots"):
+        st.dataframe(full.sort_values("z", ascending=False), hide_index=True)
+
+
+def _eda_tab_tests(d: pd.DataFrame) -> None:
+    st.caption("Les tests sont recalculés sur la **sélection courante** (voir les filtres). "
+               "Pour les résultats officiels du projet, voir la page « Tests d'hypothèses ».")
+    alpha = st.select_slider("Seuil α", options=[0.001, 0.01, 0.05, 0.10], value=0.05, key="eda_alpha")
+
+    st.markdown("#### 1. Variable numérique × recommandation — Mann-Whitney U")
+    var = st.selectbox("Variable numérique", EDA_NUMERIC, key="eda_test_var")
+    mw = eda_mann_whitney(d, var)
+    if mw is None:
+        st.info("Les deux classes doivent être présentes (au moins 2 avis chacune) : changez le filtre « Recommandation ».")
+    else:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("U", f"{mw['U']:,.0f}".replace(",", " "))
+        c2.metric("p-value", eda_fmt_p(mw["p"]))
+        c3.metric(f"Taille d'effet r ({eda_effect_label(mw['r'], 'r')})", f"{mw['r']:+.3f}")
+        c4.metric("Médianes (rec. / non rec.)", f"{mw['median1']:g} / {mw['median0']:g}")
+        verdict = "rejetée" if mw["p"] < alpha else "non rejetée"
+        st.markdown(f"**H₀ : les deux distributions sont identiques — {verdict} au seuil α = {alpha}.** "
+                    f"Effet {eda_effect_label(mw['r'], 'r')} : un avis « recommandé » pris au hasard a une valeur plus "
+                    f"{'élevée' if mw['r'] > 0 else 'faible'} qu'un « non recommandé » dans {(mw['r'] + 1) / 2 * 100:.0f} % des paires.")
+
+    st.markdown("#### 2. Variable catégorielle × recommandation — χ² d'indépendance")
+    cat = st.selectbox("Variable catégorielle", EDA_CATEGORICAL, key="eda_test_cat")
+    table = pd.crosstab(d[cat], d[EDA_TARGET])
+    if table.shape[0] < 2 or table.shape[1] < 2:
+        st.info("Il faut au moins 2 modalités et les deux classes dans la sélection.")
+    else:
+        chi2, p, v, dof = eda_cramers_v(table)
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"χ² (ddl = {dof})", f"{chi2:,.1f}".replace(",", " "))
+        c2.metric("p-value", eda_fmt_p(p))
+        c3.metric(f"V de Cramér ({eda_effect_label(v, 'v')})", f"{v:.3f}")
+        st.markdown(f"**H₀ : {cat} et la recommandation sont indépendantes — {'rejetée' if p < alpha else 'non rejetée'} au seuil α = {alpha}.**")
+        if (table.to_numpy() < 5).any():
+            st.warning("Certains effectifs sont inférieurs à 5 : l'approximation du χ² est fragile pour cette sélection.")
+
+    st.markdown("#### 3. Pourquoi des tests non paramétriques ? — normalité (Shapiro-Wilk)")
+    sample = d[var].dropna()
+    sample = sample.sample(min(len(sample), 3000), random_state=42) if len(sample) > 3 else sample
+    if len(sample) >= 8 and sample.nunique() > 1:
+        w, p_sw = scipy_stats.shapiro(sample)
+        st.markdown(f"Sur un échantillon de {len(sample)} valeurs de **{var}** : W = {w:.3f}, p = {eda_fmt_p(p_sw)} "
+                    f"→ {'distribution non normale' if p_sw < alpha else 'normalité non rejetée'}.")
+        qq = scipy_stats.probplot(sample, dist="norm")
+        theo, ordered = qq[0]
+        qq_df = pd.DataFrame({"Quantiles théoriques (loi normale)": theo, f"Quantiles observés ({var})": ordered})
+        ref = pd.DataFrame({"x": [theo.min(), theo.max()], "y": [qq[1][1] + qq[1][0] * theo.min(), qq[1][1] + qq[1][0] * theo.max()]})
+        pts = alt.Chart(qq_df).mark_circle(size=14, opacity=0.5, color=DASH_PINK).encode(x=qq_df.columns[0], y=qq_df.columns[1])
+        line = alt.Chart(ref).mark_line(color="#2D1420").encode(x="x:Q", y="y:Q")
+        st.altair_chart((pts + line).properties(height=280, title="Diagramme Q-Q : plus les points s'écartent de la droite, moins la variable est normale"))
+
+
+# --------------------------------------------------------------------------- #
+# Point d'entrée
+# --------------------------------------------------------------------------- #
+def render_eda_dashboard(clean: pd.DataFrame, raw: pd.DataFrame | None = None) -> None:
+    """Affiche le dashboard complet. `clean` = reviews_clean.csv, `raw` = reviews.csv (optionnel)."""
+    st.markdown('<div class="section-title">📈 Exploration interactive du Dataset (Women\'s E-Commerce Clothing Reviews)</div>',
+                unsafe_allow_html=True)
+    full = eda_prepare(clean)
+    d, active = _eda_filters(full)
+
+    if d.empty:
+        st.warning("Aucun avis ne correspond aux filtres choisis : élargissez la sélection.")
+        return
+
+    share = len(d) / len(full) * 100
+    st.caption(f"Sélection : **{len(d):,}** avis sur {len(full):,} ({share:.1f} %)".replace(",", " ")
+               + (" — filtres actifs : " + " · ".join(active) if active else " — aucun filtre actif"))
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Avis sélectionnés", f"{len(d):,}".replace(",", " "))
+    k2.metric("Recommandés", f"{d[EDA_TARGET].mean() * 100:.1f} %", help=f"Taux sur l'ensemble du dataset : {full[EDA_TARGET].mean() * 100:.1f} %")
+    k3.metric("Âge moyen", f"{d['Age'].mean():.1f} ans")
+    k4.metric("Note moyenne", f"{d['Rating'].mean():.2f} / 5")
+    k5.metric("Longueur moyenne", f"{d['Review Length'].mean():.0f} mots")
+
+    tabs = st.tabs(["📋 Aperçu", "🕳️ Qualité", "📊 Distributions", "🏷️ Catégories", "🔗 Corrélations", "📝 Texte", "🧪 Tests rapides"])
+    with tabs[0]:
+        _eda_tab_overview(d)
+    with tabs[1]:
+        _eda_tab_quality(raw, clean)
+    with tabs[2]:
+        _eda_tab_distributions(d)
+    with tabs[3]:
+        _eda_tab_categories(d)
+    with tabs[4]:
+        _eda_tab_correlations(d)
+    with tabs[5]:
+        _eda_tab_text(d)
+    with tabs[6]:
+        _eda_tab_tests(d)
+
+
+# --------------------------------------------------------------------------- #
+# Données du tableau de bord (nettoyées + brutes pour la qualité)
+# --------------------------------------------------------------------------- #
+@st.cache_data(show_spinner="Chargement des données…")
+def load_datasets():
+    """Dataset nettoyé et dataset brut, pour le tableau de bord statistique."""
+    clean = pd.read_csv(PROJECT_ROOT / "data" / "processed" / "reviews_clean.csv", keep_default_na=False)
+    raw_path = PROJECT_ROOT / "data" / "raw" / "reviews.csv"
+    return clean, (pd.read_csv(raw_path) if raw_path.exists() else None)
+
+
+# --- Analyses détaillées des modèles ---
+
+def _res_read(path: Path) -> pd.DataFrame | None:
+    return pd.read_csv(path) if path.exists() else None
+
+
+def _res_figure(figs: Path, name: str, caption: str) -> bool:
+    if (figs / name).exists():
+        st.image(str(figs / name), caption=caption)
+        return True
+    return False
+
+
+def _res_missing() -> None:
+    st.info("Résultats non disponibles. Vérifiez que les fichiers d'analyse requis sont présents.")
+
+
+def _res_ranked_bars(df: pd.DataFrame, label: str, title: str, key: str, default: str | None = None) -> None:
+    """Diagramme à barres triable : l'utilisateur choisit la métrique à classer."""
+    metrics = [c for c in df.select_dtypes("number").columns if not c.lower().startswith(("dimensions", "temps", "écart"))]
+    if not metrics:
+        return
+    idx = metrics.index(default) if default in metrics else 0
+    metric = st.selectbox("Classer selon", metrics, index=idx, key=key)
+    data = df[[label, metric]].dropna().sort_values(metric, ascending=False)
+    lo = max(0.0, float(data[metric].min()) - 0.05) if data[metric].max() <= 1 else 0
+    chart = (
+        alt.Chart(data)
+        .mark_bar(color=DASH_PINK, clip=True)  # clip : l'axe est tronqué, les barres ne doivent pas déborder sur les noms de modèles
+        .encode(
+            x=alt.X(f"{metric}:Q", scale=alt.Scale(domain=[lo, min(1.0, float(data[metric].max()) + 0.01)] if data[metric].max() <= 1 else alt.Undefined), title=metric),
+            y=alt.Y(f"{label}:N", sort="-x", title=None, axis=alt.Axis(labelLimit=260)),
+            tooltip=[label, alt.Tooltip(f"{metric}:Q", format=".4f")],
+        )
+        .properties(height=max(180, 34 * len(data)), title=title)
+    )
+    st.altair_chart(chart)
+    st.caption("L'axe horizontal est tronqué pour rendre les écarts lisibles : lire les valeurs dans l'info-bulle ou le tableau.")
+
+
+def _res_table(df: pd.DataFrame, name: str) -> None:
+    num = df.select_dtypes("number").columns
+    fmt = {c: "{:.4f}" for c in num if not c.lower().startswith(("dimensions", "temps"))}
+    st.dataframe(df.style.format(fmt, na_rep="n/d"), hide_index=True)
+    st.download_button("⬇️ Télécharger (CSV)", df.to_csv(index=False).encode("utf-8"), file_name=name, mime="text/csv", key=f"dl_{name}")
+
+
+# --------------------------------------------------------------------------- #
+# Matrice de confusion et courbes ROC interactives (curseur de seuil)
+# --------------------------------------------------------------------------- #
+def confusion_at(y_true, score, threshold: float) -> dict:
+    """Matrice de confusion et métriques par classe pour un seuil donné (score >= seuil -> « recommandé »)."""
+    y = np.asarray(y_true).astype(int)
+    pred = (np.asarray(score, dtype=float) >= threshold).astype(int)
+    tp = int(((pred == 1) & (y == 1)).sum())
+    tn = int(((pred == 0) & (y == 0)).sum())
+    fp = int(((pred == 1) & (y == 0)).sum())
+    fn = int(((pred == 0) & (y == 1)).sum())
+
+    def _f(num, den):
+        return float(num / den) if den else 0.0
+
+    p1, r1 = _f(tp, tp + fp), _f(tp, tp + fn)
+    p0, r0 = _f(tn, tn + fn), _f(tn, tn + fp)
+    f1_1, f1_0 = _f(2 * p1 * r1, p1 + r1), _f(2 * p0 * r0, p0 + r0)
+    return {
+        "tn": tn, "fp": fp, "fn": fn, "tp": tp,
+        "accuracy": _f(tp + tn, len(y)),
+        "precision_1": p1, "recall_1": r1, "f1_1": f1_1,
+        "precision_0": p0, "recall_0": r0, "f1_0": f1_0,
+        "f1_macro": (f1_0 + f1_1) / 2,
+    }
+
+
+def natural_threshold(model_name: str) -> float:
+    """Seuil « naturel » : 0 pour une marge de SVM, 0,5 pour une probabilité."""
+    return 0.0 if "svc" in model_name.lower() or "svm" in model_name.lower() else 0.5
+
+
+def load_test_scores(project_root: Path) -> pd.DataFrame | None:
+    """Scores des modèles sur le même jeu de test : ensembles de l'équipe + Gradient Boosting."""
+    team = _res_read(project_root / "models" / "ensemble_test_scores.csv")
+    if team is None:
+        return None
+    gb = _res_read(project_root / "reports" / "gradient_boosting_test_scores.csv")
+    if gb is not None and "row_id" in gb.columns:
+        gb = gb.drop(columns=["y_true"], errors="ignore")
+        team = team.merge(gb, on="row_id", how="left")
+    return team
+
+
+def _interactive_threshold_tab(project_root: Path) -> None:
+    data = load_test_scores(project_root)
+    if data is None or "y_true" not in data.columns:
+        _res_missing()
+        return
+    models = [c for c in data.columns if c not in ("row_id", "y_true") and data[c].notna().all()]
+    y = data["y_true"].to_numpy()
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        name = st.selectbox("Modèle", models, index=models.index("Gradient Boosting") if "Gradient Boosting" in models else 0, key="thr_model")
+    score = data[name].to_numpy(dtype=float)
+    lo, hi = float(score.min()), float(score.max())
+    default = min(max(natural_threshold(name), lo), hi)
+    with c2:
+        thr = st.slider("Seuil de décision (≥ seuil → « recommandé »)", lo, hi, default, step=(hi - lo) / 400 or 0.01,
+                        key=f"thr_value_{name}", help="Baisser le seuil détecte plus d'avis recommandés mais laisse passer plus de faux positifs ; "
+                                                    "le relever protège la classe minoritaire (avis non recommandés).")
+    m = confusion_at(y, score, thr)
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Accuracy", f"{m['accuracy']:.3f}")
+    k2.metric("F1 macro", f"{m['f1_macro']:.3f}")
+    k3.metric("F1 classe 0 (non recommandé)", f"{m['f1_0']:.3f}")
+    k4.metric("F1 classe 1 (recommandé)", f"{m['f1_1']:.3f}")
+
+    left, right = st.columns(2)
+    with left:
+        cells = pd.DataFrame({
+            "Réel": ["Non recommandé", "Non recommandé", "Recommandé", "Recommandé"],
+            "Prédit": ["Non recommandé", "Recommandé", "Non recommandé", "Recommandé"],
+            "Avis": [m["tn"], m["fp"], m["fn"], m["tp"]],
+        })
+        cells["Part de la classe réelle"] = cells["Avis"] / cells.groupby("Réel")["Avis"].transform("sum")
+        order = ["Non recommandé", "Recommandé"]
+        base = alt.Chart(cells).encode(x=alt.X("Prédit:N", sort=order, title="Classe prédite", axis=alt.Axis(labelAngle=0)), y=alt.Y("Réel:N", sort=order, title="Classe réelle"))
+        heat = base.mark_rect().encode(
+            color=alt.Color("Part de la classe réelle:Q", scale=alt.Scale(domain=[0, 1], range=["#FCE4EC", DASH_PINK]), legend=None),
+            tooltip=["Réel", "Prédit", "Avis", alt.Tooltip("Part de la classe réelle:Q", format=".1%")],
+        )
+        text = base.mark_text(fontSize=15, fontWeight="bold").encode(
+            text=alt.Text("Avis:Q"),
+            color=alt.condition(alt.datum["Part de la classe réelle"] > 0.5, alt.value("white"), alt.value("#3E1030")),
+        )
+        st.altair_chart((heat + text).properties(height=300, title=f"Matrice de confusion — {name}"))
+    with right:
+        curves = []
+        for col in models:
+            fpr, tpr, _ = roc_curve(y, data[col].to_numpy(dtype=float))
+            curves.append(pd.DataFrame({"Taux de faux positifs": fpr, "Taux de vrais positifs": tpr, "Modèle": col,
+                                        "Sélection": "Modèle choisi" if col == name else "Autres modèles"}))
+        roc = pd.concat(curves, ignore_index=True)
+        lines = alt.Chart(roc).mark_line().encode(
+            x=alt.X("Taux de faux positifs:Q", scale=alt.Scale(domain=[0, 1])),
+            y=alt.Y("Taux de vrais positifs:Q", scale=alt.Scale(domain=[0, 1])),
+            detail="Modèle:N",
+            color=alt.Color("Sélection:N", scale=alt.Scale(domain=["Modèle choisi", "Autres modèles"], range=[DASH_PINK, "#A78BBF"]), legend=alt.Legend(title=None)),
+            size=alt.condition(alt.datum["Sélection"] == "Modèle choisi", alt.value(3.5), alt.value(1.3)),
+            tooltip=["Modèle", alt.Tooltip("Taux de faux positifs:Q", format=".3f"), alt.Tooltip("Taux de vrais positifs:Q", format=".3f")],
+        )
+        point = pd.DataFrame({"Taux de faux positifs": [m["fp"] / max(m["fp"] + m["tn"], 1)],
+                              "Taux de vrais positifs": [m["recall_1"]], "Point de fonctionnement": ["Seuil choisi"]})
+        dot = alt.Chart(point).mark_point(size=160, filled=True, color="#1B1B1B").encode(
+            x="Taux de faux positifs:Q", y="Taux de vrais positifs:Q", tooltip=["Point de fonctionnement"])
+        diag = alt.Chart(pd.DataFrame({"Taux de faux positifs": [0, 1], "Taux de vrais positifs": [0, 1]})).mark_line(
+            strokeDash=[4, 4], color="#999").encode(x="Taux de faux positifs:Q", y="Taux de vrais positifs:Q")
+        st.altair_chart((diag + lines + dot).properties(height=300, title=f"Courbes ROC — AUC {name} = {roc_auc_score(y, score):.3f}"))
+
+    st.dataframe(pd.DataFrame({
+        "Classe": ["0 — non recommandé (minoritaire)", "1 — recommandé"],
+        "Précision": [m["precision_0"], m["precision_1"]],
+        "Rappel": [m["recall_0"], m["recall_1"]],
+        "F1": [m["f1_0"], m["f1_1"]],
+    }).style.format({"Précision": "{:.3f}", "Rappel": "{:.3f}", "F1": "{:.3f}"}), hide_index=True)
+    st.caption("Le point noir de la courbe ROC se déplace avec le curseur : c'est le compromis réellement choisi. "
+               "Sur un jeu 82/18, regarder le F1 de la classe 0 évite de se contenter d'une accuracy flatteuse.")
+
+
+def _render_model_analysis_tabs(project_root: Path) -> None:
+    reports, figs = project_root / "reports", project_root / "docs" / "figures"
+    st.caption(
+        "Comparaison approfondie des modèles, représentations du texte, réglages et ablation. "
+        "F1 (0) mesure la détection des avis **non recommandés** (classe minoritaire, 18 %)."
+    )
+    tabs_all = st.tabs(["🏁 Tous les modèles", "🎚️ Seuil interactif", "🚀 Gradient Boosting", "📝 Représentations du texte", "🔧 Réglages & ablation", "🧠 Importance des variables"])
+    tabs = [tabs_all[0], tabs_all[2], tabs_all[3], tabs_all[4], tabs_all[5]]  # numérotation historique 0..4 conservée
+    with tabs_all[1]:
+        _interactive_threshold_tab(project_root)
+
+    with tabs[0]:
+        res = _res_read(reports / "model_results.csv")
+        if res is None:
+            _res_missing()
+        else:
+            label = res.columns[0]
+            _res_ranked_bars(res.drop(columns=["Temps (s)"], errors="ignore"), label, "Comparaison des modèles (jeu de test)", "res_metric", "F1 macro")
+            _res_table(res.drop(columns=["Temps (s)"], errors="ignore"), "model_results.csv")
+        for name, cap in [("confusion_matrices.png", "Matrices de confusion normalisées par classe réelle (jeu de test)"),
+                          ("roc_pr_curves.png", "Courbes ROC et précision-rappel"),
+                          ("model_comparison.png", "F1 macro et ROC-AUC par modèle")]:
+            _res_figure(figs, name, cap)
+
+    with tabs[1]:
+        comp = _res_read(reports / "ensemble_comparison_with_gb.csv")
+        if comp is None:
+            _res_missing()
+        else:
+            params = _res_read(reports / "gradient_boosting_best_params.csv")
+            if params is not None:
+                st.markdown("**Hyperparamètres retenus** : " + " · ".join(f"`{r['hyperparamètre']}` = {r['valeur']}" for _, r in params.iterrows()))
+            _res_ranked_bars(comp, "Modèle", "Gradient Boosting face aux autres ensembles (jeu de test)", "gb_metric", "F1 (0)")
+            _res_table(comp, "ensemble_comparison_with_gb.csv")
+            cv = _res_read(reports / "gradient_boosting_cv.csv")
+            if cv is not None:
+                with st.expander("Grille de validation croisée (6 plis)"):
+                    _res_table(cv, "gradient_boosting_cv.csv")
+            for name, cap in [("gradient_boosting_vs_ensembles.png", "Courbes ROC et F1 de la classe minoritaire"),
+                              ("gradient_boosting_confusion.png", "Matrice de confusion du Gradient Boosting"),
+                              ("gradient_boosting_stages.png", "Apprentissage au fil des arbres (sans utiliser le jeu de test)"),
+                              ("gradient_boosting_cv.png", "Effet de la profondeur et du nombre d'arbres"),
+                              ("gradient_boosting_importance.png", "Variables les plus importantes")]:
+                _res_figure(figs, name, cap)
+
+    with tabs[2]:
+        txt = _res_read(reports / "text_representations.csv")
+        if txt is None:
+            _res_missing()
+        else:
+            st.markdown(
+                "Même classifieur (SVM linéaire), même validation croisée à 6 plis, **texte seul** : seule la représentation change. "
+                "LSA et Word2Vec sont des représentations denses de Machine Learning classique (aucun réseau profond, aucun modèle pré-entraîné)."
+            )
+            _res_ranked_bars(txt, txt.columns[0], "Représentations du texte", "txt_metric", "F1 macro (test)")
+            _res_table(txt, "text_representations.csv")
+            _res_figure(figs, "text_representations.png", "Comparaison des représentations textuelles")
+
+    with tabs[3]:
+        shown = False
+        abl = _res_read(reports / "ablation.csv")
+        if abl is not None:
+            st.markdown("**Ablation** : que perd-on sans la note, sans le texte ou sans les métadonnées ? (modèle ré-optimisé à chaque fois)")
+            _res_table(abl, "ablation.csv")
+            shown = True
+        for name, cap in [("svm_kernels.png", "SVM : noyaux linéaire, RBF et polynomial"),
+                          ("knn_k_curve.png", "K-NN : impact de K et de la distance"),
+                          ("tree_pruning_curve.png", "Arbre de décision : élagage par coût-complexité"),
+                          ("ablation.png", "Ablation : sans la note, sans le texte")]:
+            shown = _res_figure(figs, name, cap) or shown
+        if not shown:
+            _res_missing()
+
+    with tabs[4]:
+        cons = _res_read(reports / "feature_importance_consensus.csv")
+        shown = False
+        if cons is not None:
+            _res_table(cons.head(30), "feature_importance_consensus.csv")
+            shown = True
+        for name, cap in [("importance_consensus.png", "Importance « consensus » de plusieurs méthodes"),
+                          ("feature_importance.png", "Coefficients du SVM linéaire")]:
+            shown = _res_figure(figs, name, cap) or shown
+        if not shown:
+            _res_missing()
+
+
+def render_model_analysis(project_root: Path) -> None:
+    with st.expander("Analyses approfondies des modèles"):
+        _render_model_analysis_tabs(project_root)
+
+
+# <<< FIN DU BLOC AJOUTÉ
+# ==============================================================================
+
 PAGES = [
     "🏠 Accueil",
     "🔮 Prédiction en Direct",
@@ -594,19 +1367,18 @@ if page == PAGES[1]:
 if page == PAGES[2]:
     st.markdown('<div class="section-title">📊 Comparatif des Modèles Classiques</div>', unsafe_allow_html=True)
     st.markdown(
-        "Comparaison des modèles à partir des métriques réellement exportées "
-        "par le notebook `03_classification_models.ipynb`."
+        "Comparaison des modèles à partir des métriques d'évaluation disponibles."
     )
+    render_model_analysis(PROJECT_ROOT)
 
-    # Recherche du CSV dans le dossier notebooks du projet.
+    # Recherche des métriques dans les emplacements du projet.
     metrics_path = PROJECT_ROOT / "notebooks" / "evaluation_metrics.csv"
     if not metrics_path.exists():
         metrics_path = Path(__file__).resolve().parent / "notebooks" / "evaluation_metrics.csv"
 
     if not metrics_path.exists():
         st.error(
-            "Le fichier `notebooks/evaluation_metrics.csv` est introuvable. "
-            "Exécutez le notebook 03 et vérifiez que le CSV est bien présent."
+            "Les métriques d'évaluation sont introuvables dans les fichiers du projet."
         )
         st.stop()
 
@@ -798,6 +1570,9 @@ if page == PAGES[3]:
         }).set_index("Département")
         st.bar_chart(dept_dist, color="#F06292")
 
+    st.markdown("---")
+    render_eda_dashboard(*load_datasets())
+
 # ==============================================================================
 # PAGE 5 : DÉCOUVERTES CLÉS
 # ==============================================================================
@@ -885,7 +1660,7 @@ if page == PAGES[5]:
 
     st.markdown('<div class="section-title">🧪 Tests d\'hypothèses statistiques</div>', unsafe_allow_html=True)
     st.markdown(
-        "Tests réalisés lors de l'analyse exploratoire (notebook `01_eda_and_cleaning`) sur la relation "
+        "Tests réalisés lors de l'analyse exploratoire sur la relation "
         "entre les variables du dataset et la recommandation (`Recommended IND`)."
     )
 
@@ -964,13 +1739,38 @@ ENS_LENGTH_LABELS = ["≤ 20 mots", "21-40", "41-60", "61-80", "> 80 mots"]
 
 @st.cache_data
 def load_ensemble_data():
-    """Charge les fichiers produits par les notebooks 04 et 05 (None s'ils sont absents)."""
+    """Charge et normalise les données nécessaires aux analyses d'ensemble."""
     needed = ["error_analysis.csv", "ensemble_feature_importance.csv", "ensemble_block_importance.csv"]
     if not all((MODELS_DIR / f).exists() for f in needed):
         return None
+
     errors_df = pd.read_csv(MODELS_DIR / "error_analysis.csv", keep_default_na=False)
+
     features_df = pd.read_csv(MODELS_DIR / "ensemble_feature_importance.csv")
+    for column in ("Model", "Feature", "Importance"):
+        if column not in features_df.columns:
+     u       features_df[column] = "" if column != "Importance" else 0.0
+    if "Block" not in features_df.columns:
+        features_df["Block"] = "Autres"
+
+    features_df["Model"] = features_df["Model"].fillna("Inconnu").astype(str).str.strip()
+    features_df["Feature"] = features_df["Feature"].fillna("Inconnue").astype(str).str.strip()
+    features_df["Block"] = features_df["Block"].fillna("Autres").astype(str).str.strip().replace("", "Autres")
+    features_df["Importance"] = pd.to_numeric(features_df["Importance"], errors="coerce").fillna(0.0)
+    features_df = (
+        features_df[["Model", "Feature", "Block", "Importance"]]
+        .query("Model != '' and Feature != ''")
+        .sort_values(["Model", "Importance", "Feature"], ascending=[True, False, True])
+        .reset_index(drop=True)
+    )
+
     blocks_df = pd.read_csv(MODELS_DIR / "ensemble_block_importance.csv", index_col="Bloc")
+    for column in blocks_df.columns:
+        blocks_df[column] = pd.to_numeric(blocks_df[column], errors="coerce").fillna(0.0)
+    blocks_df = blocks_df.fillna(0.0)
+    if blocks_df.index.name is None:
+        blocks_df.index.name = "Bloc"
+
     return errors_df, features_df, blocks_df
 
 
@@ -1127,8 +1927,7 @@ if page == PAGES[6]:
     ens_data = load_ensemble_data()
     if ens_data is None:
         st.warning(
-            "Fichiers introuvables dans `models/`. Exécutez d'abord les notebooks "
-            "`04_ensemble_learning` puis `05_error_analysis`."
+            "Fichiers d'analyse introuvables dans `models/`. Vérifiez que les analyses d'ensemble ont été générées."
         )
     else:
         errors_df, features_df, blocks_df = ens_data
@@ -1448,20 +2247,20 @@ st.markdown(
 # PAGE : ANALYSE DES ERREURS - LINEAR SVC
 # ==============================================================================
 
-if page == PAGES[7]:
+if page == PAGES[8]:
 
     st.markdown(
         '<div class="section-title">🔍 Analyse des erreurs — Linear SVC</div>',
         unsafe_allow_html=True
     )
 
-    # Load real confusion matrix exported from notebook
+    # Charge la matrice de confusion enregistrée.
     cm_path = MODELS_DIR / "linear_svc_confusion_matrix.csv"
 
     if not cm_path.exists():
         st.error(
             "Matrice de confusion introuvable. "
-            "Exécutez d'abord le notebook 03."
+            "Les données d'évaluation sont introuvables."
         )
 
     else:
@@ -1531,3 +2330,6 @@ if page == PAGES[7]:
             "Les taux d'erreur permettent d'évaluer séparément sa capacité "
             "à identifier les avis non recommandés et recommandés."
         )
+
+
+# ==============================================================================
