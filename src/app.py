@@ -1749,7 +1749,7 @@ def load_ensemble_data():
     features_df = pd.read_csv(MODELS_DIR / "ensemble_feature_importance.csv")
     for column in ("Model", "Feature", "Importance"):
         if column not in features_df.columns:
-     u       features_df[column] = "" if column != "Importance" else 0.0
+            features_df[column] = "" if column != "Importance" else 0.0
     if "Block" not in features_df.columns:
         features_df["Block"] = "Autres"
 
