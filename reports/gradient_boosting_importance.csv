@@ -1,0 +1,51 @@
+variable,importance
+num__Rating,0.6551657067467046
+review_tfidf__disappointed,0.019678507427732535
+review_tfidf__returned,0.015095248311290221
+review_tfidf__wanted love,0.013675224281278089
+review_tfidf__returning,0.012994127161839826
+review_tfidf__unflattering,0.008047991901555623
+review_tfidf__looked,0.008000446597132409
+review_tfidf__cheap,0.007988475615349462
+review_tfidf__unfortunately,0.005420977097948602
+review_tfidf__huge,0.005347825445428601
+title_tfidf__disappointed,0.004425293764673358
+review_tfidf__love,0.004171593303848269
+review_tfidf__return,0.0034197664750963523
+review_tfidf__excited,0.003242171580863711
+review_tfidf__way,0.003046601183397149
+review_tfidf__poor,0.002909779163768127
+review_tfidf__wanted,0.0027595099030298257
+title_tfidf__unflattering,0.0025199195374087614
+title_tfidf__wanted,0.00249995499611177
+review_tfidf__odd,0.002370421633084167
+review_tfidf__looked like,0.002147916608473923
+review_tfidf__great,0.0020480942649665173
+review_tfidf__sadly,0.0019804528403233315
+review_tfidf__perfect,0.0019094695730854183
+title_tfidf__poor,0.0018315216723431445
+review_tfidf__wanted like,0.0017692503588833445
+review_tfidf__like,0.0017241083933768747
+review_tfidf__didn work,0.001663219105267637
+review_tfidf__bad,0.0015173045524270264
+title_tfidf__runs,0.00147022015407727
+title_tfidf__cute,0.0013069307669699663
+review_tfidf__size,0.001297631536223075
+title_tfidf__meh,0.0012757350286503706
+review_tfidf__couldn,0.0012381837023785914
+title_tfidf__disappointing,0.001167931657455536
+review_tfidf__wide,0.0011676536788723627
+review_tfidf__comfortable,0.0011321100997846165
+title_tfidf__quality,0.0011319533344515817
+review_tfidf__lay,0.0011211993129150502
+num__Age,0.001119219696640011
+title_tfidf__boxy,0.001100516345359827
+review_tfidf__really wanted,0.0010103700659495857
+review_tfidf__order,0.0010097675864234436
+review_tfidf__soft comfy,0.0009925242315468714
+review_tfidf__tight,0.0009850115443868657
+review_tfidf__nice,0.000967012023464098
+review_tfidf__shame,0.0009435077070010302
+num__Positive Feedback Count,0.0009374327967404081
+review_tfidf__bit,0.000920373669927332
+review_tfidf__little,0.0009181447862296898

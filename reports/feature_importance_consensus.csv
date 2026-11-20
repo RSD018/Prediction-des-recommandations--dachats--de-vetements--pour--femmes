@@ -1,0 +1,16 @@
+Variable,Linear SVC (|coef|),Random Forest (Gini),χ²,XGBoost (gain),AdaBoost,Consensus
+Rating,0.9051,1.0,1.0,1.0,1.0,0.981
+Avis : returned,1.0,0.035,0.0798,0.0,0.0,0.223
+Titre : unflattering,0.677,0.0072,0.1551,0.0,0.0,0.1678
+Titre : meh,0.7153,0.0012,0.076,0.0,0.0,0.1585
+Avis : wanted love,0.6547,0.032,0.0837,0.0,0.0,0.1541
+Avis : returning,0.6645,0.0267,0.0685,0.0,0.0,0.1519
+Titre : disappointing,0.5578,0.006,0.1563,0.0,0.0,0.144
+Avis : disappointed,0.5841,0.0438,0.0905,0.0,0.0,0.1437
+Titre : disappointed,0.4206,0.0106,0.2089,0.0,0.0,0.128
+Avis : medium,0.608,0.0037,0.0034,0.0,0.0,0.123
+Avis : order,0.6088,0.0026,0.0017,0.0,0.0,0.1226
+Avis : excited,0.5176,0.0179,0.0413,0.0,0.0,0.1154
+Avis : material,0.538,0.02,0.0145,0.0,0.0,0.1145
+Titre : great dress,0.5375,0.0007,0.0112,0.0,0.0,0.1099
+Avis : recommend,0.5346,0.0031,0.0041,0.0,0.0,0.1084

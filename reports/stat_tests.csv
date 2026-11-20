@@ -1,0 +1,9 @@
+Test,Variables,Statistique,p-value,Taille d'effet,Type d'effet,Justification,p-value ajustée (BH),"Décision (α = 0,05)"
+T1 Shapiro-Wilk,Age,0.9753374817454055,1.4373549169628224e-28,,-,Normalité : décide paramétrique vs non paramétrique,2.299767867140516e-28,Non normal
+T1 Shapiro-Wilk,Rating,0.7353036406618444,5.324990459838882e-67,,-,Normalité : décide paramétrique vs non paramétrique,2.1299961839355527e-66,Non normal
+T2 Mann-Whitney U,Age vs Recommended IND,42136250.0,1.8583035491023247e-06,0.04698826428931979,r bisérial par rangs,"2 groupes indépendants, variable non normale/ordinale",1.8583035491023247e-06,Rejet de H0
+T3 Mann-Whitney U,Rating vs Recommended IND,78256892.0,0.0,0.9445025963097511,r bisérial par rangs,"2 groupes indépendants, variable non normale/ordinale",0.0,Rejet de H0
+T4 Kruskal-Wallis,Rating vs Department Name,79.12048981761424,1.2817897347287647e-15,0.0031614625641976646,epsilon²,"Plus de 2 groupes, variable ordinale (alternative non paramétrique à l'ANOVA)",1.709052979638353e-15,Rejet de H0
+T5 Spearman,Age vs Positive Feedback Count,0.07546919212945609,5.422416372445188e-31,0.07546919212945609,rho de Spearman,Relation monotone entre deux variables non normales,1.0844832744890375e-30,Rejet de H0
+T6 Spearman,Review Length vs Rating,-0.09129161985979203,1.3010106262821305e-44,-0.09129161985979203,rho de Spearman,Relation monotone entre deux variables non normales,3.469361670085681e-44,Rejet de H0
+T7 Chi-deux,Class Name vs Recommended IND,75.43282430293245,2.453276832651904e-09,0.05671883234549306,V de Cramér,"Deux variables qualitatives, effectifs théoriques >= 5",2.803744951602176e-09,Rejet de H0
