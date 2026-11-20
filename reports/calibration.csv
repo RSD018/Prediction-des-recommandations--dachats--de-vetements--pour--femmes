@@ -1,0 +1,3 @@
+Méthode,Brier,Log-loss
+Sigmoïde brute de la marge (non calibrée),0.0442,0.1643
+Platt (marges hors-pli du train),0.0416,0.139

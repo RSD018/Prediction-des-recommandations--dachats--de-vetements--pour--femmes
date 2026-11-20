@@ -12,7 +12,7 @@ Projet de **Data Mining / Machine Learning classique (sans Deep Learning)** visa
 
 Le pipeline complet — nettoyage, prétraitement, entraînement, évaluation, analyse des erreurs — aboutit à une **application web interactive (Streamlit)** permettant de tester le modèle en direct.
 
-📄 Le rapport détaillé du mini-projet est disponible dans [`docs/Rapport_MiniProject.pdf`](docs/Rapport_MiniProject.pdf).
+📄 Le rapport détaillé du mini-projet est disponible dans [`docs/nv-rapport.pdf`](docs/nv-rapport.pdf).
 
 **Résultats clés (jeu de test de 4 693 avis, seuil de décision 0.5)**
 
@@ -56,40 +56,26 @@ Prediction-des-recommandations--dachats--de-vetements--pour--femmes/
 │       └── reviews_clean.csv            # Dataset nettoyé (notebook 01)
 │
 ├── docs/
-│   └── Rapport_MiniProject.pdf          # Rapport écrit du mini-projet
+│   ├── main.tex                         # Source LaTeX du rapport
+│   └── nv-rapport.pdf                   # Rapport écrit du mini-projet
 │
-├── models/
-│   ├── best_model.pkl                   # Modèle final (Linear SVC)
-│   ├── preprocessor.pkl                 # ColumnTransformer (imputation, scaling, OHE, TF-IDF)
-│   ├── review_tfidf.pkl                 # Vectoriseur TF-IDF (Review Text)
-│   ├── title_tfidf.pkl                  # Vectoriseur TF-IDF (Title)
-│   ├── adaboost_model.pkl               # AdaBoost optimisé (notebook 04)
-│   ├── xgboost_model.pkl                # XGBoost optimisé (notebook 04)
-│   ├── ensemble_gridsearch_results.csv  # Détail des combinaisons GridSearchCV (notebook 04)
-│   ├── ensemble_test_scores.csv         # Score de chaque modèle sur le jeu de test (notebook 04)
-│   ├── ensemble_class_metrics.csv       # Métriques par classe (notebook 05)
-│   ├── error_analysis.csv               # Un avis de test par ligne : scores et métadonnées (notebook 05)
-│   ├── ensemble_feature_importance.csv  # Variables les plus importantes (notebook 05)
-│   └── ensemble_block_importance.csv    # Importance par bloc de variables (notebook 05)
+├── models/                              # Modèles entraînés et résultats utilisés par l'application
 │
-├── notebooks/
-│   ├── 01_eda_and_cleaning.ipynb        # Exploration, nettoyage, tests statistiques
-│   ├── 02_preprocessing_encoding.ipynb  # Split train/test, encodage, TF-IDF
-│   ├── 03_classification_models.ipynb   # Entraînement, comparaison, sauvegarde du modèle
-│   ├── 04_ensemble_learning.ipynb       # AdaBoost, XGBoost, Soft Voting (GridSearchCV)
-│   └── 05_error_analysis.ipynb          # Métriques par classe, analyse des erreurs, exports pour l'app
+├── notebooks/                           # Analyses reproductibles, étapes 01 à 08
+├── reports/                             # Tableaux de résultats et analyses exportés
 │
 ├── src/
 │   ├── app.py                           # Application Streamlit (démo interactive)
+│   ├── ml_utils.py                      # Prétraitement et évaluation partagés
 │   └── config.toml                      # Thème Streamlit (couleurs, mode clair)
 │
-├── venv/ ou .venv/                      # Environnement virtuel (ignoré par git)
+├── tests/                               # Tests de l'application, des données et des modèles
 ├── .gitignore
 ├── README.md
 └── requirements.txt
 ```
 
-> 💡 Après avoir cloné le dépôt, place `reviews.csv` dans `data/raw/` et exécute les notebooks dans l'ordre (**01 → 02 → 03 → 04 → 05**) pour régénérer `data/processed/reviews_clean.csv` et les fichiers `models/*`. L'application (`src/app.py`) résout automatiquement le chemin vers `models/` à la racine du projet (`Path(__file__).resolve().parents[1]`) : aucune configuration manuelle n'est nécessaire une fois les modèles générés.
+> 💡 Après avoir cloné le dépôt, place `reviews.csv` dans `data/raw/` et exécute les notebooks dans l'ordre (**01 → 08**) pour régénérer les données traitées, modèles et rapports. Le Gradient Boosting est inclus dans `04_ensemble_learning.ipynb`. L'application (`src/app.py`) résout automatiquement le chemin vers `models/` à la racine du projet (`Path(__file__).resolve().parents[1]`) : aucune configuration manuelle n'est nécessaire une fois les modèles générés.
 
 ## 📊 Dataset
 
@@ -203,18 +189,19 @@ Le modèle déployé pour la **Prédiction en Direct** reste **Linear SVC** (`mo
 
 ## 🖥️ Application Streamlit
 
-Fichier : `src/app.py`. Interface interactive avec **8 onglets** :
+Fichier : `src/app.py`. Interface interactive avec **9 pages** :
 
 | Onglet | Contenu |
 |---|---|
 | 🏠 Accueil | Présentation du projet |
 | 🔮 Prédiction en Direct | Saisie d'un profil (département, catégorie, âge, note, avis) → prédiction en temps réel via `model.predict()` sur les données transformées par `preprocessor.pkl` |
-| 📊 Performance des Modèles | Tableau comparatif + graphique F1-Score |
+| 📊 Performance des Modèles | Comparaison des modèles et analyses approfondies interactives |
 | 📈 Statistiques du Dataset | Répartition de la cible, répartition par département |
 | 💡 Découvertes Clés | Synthèse des insights (déséquilibre des classes, modèle champion, limites de l'arbre de décision, apport du tuning) |
 | 🧪 Tests d'hypothèses | Récapitulatif des tests du notebook 01 (α = 0,05) : H1 Mann-Whitney U (`Rating` vs `Recommended IND`) et H2 Chi² d'indépendance (`Department Name` vs `Recommended IND`), avec statistique, p-value brute, p-value ajustée (FDR Benjamini-Hochberg), taille d'effet (r de rang bisérial, V de Cramér) et décision |
 | 🌲 Ensemble Learning | Comparaison d'AdaBoost, XGBoost et Soft Voting : métriques par classe, matrice de confusion et courbes ROC interactives (choix du modèle et du seuil), analyse des erreurs par note, département et longueur d'avis, importance des variables |
 | ℹ️ À propos | Stack technique et disclaimer académique |
+| 🔍 Analyse des erreurs | Matrice de confusion et interprétation des erreurs du Linear SVC |
 
 <!-- Ajouter ici des captures d'écran de l'application, par exemple :
 ![Prédiction en direct](docs/screenshots/prediction.png)
@@ -247,7 +234,7 @@ pip install -r requirements.txt
 
 Placer `reviews.csv` dans `data/raw/`, puis exécuter les notebooks dans l'ordre **01 → 02 → 03 → 04 → 05**, ou lancer directement `streamlit run src/app.py` si les fichiers `.pkl` sont déjà présents dans `models/`.
 
-> ⚠️ Les fichiers `.pkl` produits par `joblib` ne sont garantis compatibles qu'avec la version de scikit-learn qui les a créés : installer les dépendances depuis `requirements.txt` (versions figées).
+> ⚠️ Les fichiers `.pkl` produits par `joblib` ne sont garantis compatibles qu'avec la version de scikit-learn qui les a créés : utiliser la version indiquée dans `requirements.txt`.
 
 ## 🔁 Reproductibilité
 
@@ -258,9 +245,12 @@ Pour régénérer entièrement le projet à partir des données brutes :
 | 1. Nettoyage | `01_eda_and_cleaning.ipynb` | `data/raw/reviews.csv` | `data/processed/reviews_clean.csv` |
 | 2. Prétraitement | `02_preprocessing_encoding.ipynb` | `data/processed/reviews_clean.csv` | matrices sparse train/test + `models/preprocessor.pkl` |
 | 3. Modélisation | `03_classification_models.ipynb` | matrices train/test | `models/best_model.pkl` |
-| 4. Ensemble Learning | `04_ensemble_learning.ipynb` | `data/processed/reviews_clean.csv` + `models/preprocessor.pkl` | `models/adaboost_model.pkl`, `models/xgboost_model.pkl`, `models/ensemble_test_scores.csv`, `models/ensemble_gridsearch_results.csv` |
+| 4. Ensemble Learning et Gradient Boosting | `04_ensemble_learning.ipynb` | `data/processed/reviews_clean.csv` + `models/preprocessor.pkl` | modèles AdaBoost, XGBoost et Gradient Boosting, scores d'ensemble, comparaisons dans `reports/` |
 | 5. Analyse des erreurs | `05_error_analysis.ipynb` | `models/ensemble_test_scores.csv` + modèles | `models/error_analysis.csv`, `models/ensemble_class_metrics.csv`, `models/ensemble_feature_importance.csv`, `models/ensemble_block_importance.csv` |
-| 6. Démo | `src/app.py` | `models/*.pkl` et `models/*.csv` | interface Streamlit |
+| 6. Comparaisons approfondies | `06_modeling_cv_kernels.ipynb` | données traitées + modèles | `reports/model_results.csv`, `reports/ablation.csv`, `reports/calibration.csv` |
+| 7. Tests statistiques | `07_additional_statistical_tests.ipynb` | données traitées | `reports/stat_tests.csv` |
+| 8. Représentations textuelles | `08_text_representations.ipynb` | données traitées | `reports/text_representations.csv` |
+| 9. Démo | `src/app.py` | `models/*.pkl`, `models/*.csv` et `reports/*.csv` | interface Streamlit |
 
 Un `random_state=42` est fixé sur les modèles à composante aléatoire (Decision Tree, Random Forest, Linear SVC, AdaBoost, XGBoost) et le split train/test est stratifié (`stratify=y`) pour garantir la reproductibilité des résultats.
 

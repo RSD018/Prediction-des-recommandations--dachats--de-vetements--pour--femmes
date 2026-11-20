@@ -808,12 +808,10 @@ Prediction-des-recommandations--dachats--de-vetements--pour--femmes/
 │   └── processed/
 │       └── reviews_clean.csv            # dataset nettoyé (notebook 01)
 ├── docs/
-│   └── Rapport_MiniProject.pdf          # rapport écrit du mini-projet
+│   └── nv-rapport.pdf                   # rapport écrit du mini-projet
 ├── models/
 │   ├── best_model.pkl                   # modèle final (Linear SVC)
-│   ├── preprocessor.pkl                 # ColumnTransformer (imputation, scaling, OHE, TF-IDF)
-│   ├── review_tfidf.pkl                 # vectoriseur TF-IDF (Review Text)
-│   └── title_tfidf.pkl                  # vectoriseur TF-IDF (Title)
+│   └── preprocessor.pkl                 # ColumnTransformer (imputation, scaling, OHE, TF-IDF)
 ├── notebooks/
 │   ├── 01_eda_and_cleaning.ipynb        # exploration, nettoyage, tests statistiques
 │   ├── 02_preprocessing_encoding.ipynb  # split train/test, encodage, TF-IDF
@@ -1100,8 +1098,6 @@ Les objets entraînés sont sauvegardés avec \code{joblib} dans le dossier \cod
 
 \begin{ltab}{L{0.22}L{0.36}L{0.17}L{0.25}}{Fichiers sérialisés du dossier \code{models/}}{tab:artefacts}{\hc{Fichier}&\hc{Contenu}&\hc{Produit par}&\hc{Utilisé par}}
 \code{preprocessor.pkl} & ColumnTransformer ajusté (imputation, scaling, one-hot, TF-IDF) & Notebook 02 & Notebook 03, application\\
-\code{review_tfidf.pkl} & Vectoriseur TF-IDF du champ Review Text & Notebook 02 & Archivage du vectoriseur\\
-\code{title_tfidf.pkl} & Vectoriseur TF-IDF du champ Title & Notebook 02 & Archivage du vectoriseur\\
 \code{best_model.pkl} & Modèle final : Linear SVC optimisé & Notebook 03 & Application\\
 \end{ltab}
 

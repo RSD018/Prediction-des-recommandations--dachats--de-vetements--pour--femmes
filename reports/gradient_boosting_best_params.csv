@@ -1,0 +1,7 @@
+hyperparamètre,valeur
+max_depth,5
+max_features,0.1
+n_estimators,400
+learning_rate,0.1
+subsample,0.8
+F1 macro CV,0.9013

@@ -1,0 +1,7 @@
+{
+  "model": "LinearSVC",
+  "method": "Platt scaling sur marges hors-pli (StratifiedKFold 6, random_state=42)",
+  "coef": 3.479076059840503,
+  "intercept": 0.047623526274727,
+  "brier_test": 0.04156258624810126
+}
