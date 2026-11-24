@@ -27,6 +27,7 @@ Le pipeline complet — nettoyage, prétraitement, entraînement, évaluation, a
 - [Dataset](#-dataset)
 - [Démarche Data Mining](#-démarche-data-mining)
 - [Ensemble Learning et analyse des erreurs](#-ensemble-learning-et-analyse-des-erreurs)
+- [Traitement NLP des avis et recommandation hybride](#-traitement-nlp-des-avis-et-recommandation-hybride)
 - [Application Streamlit](#-application-streamlit)
 - [Stack technique](#-stack-technique)
 - [Installation](#-installation)
@@ -61,12 +62,12 @@ Prediction-des-recommandations--dachats--de-vetements--pour--femmes/
 │
 ├── models/                              # Modèles entraînés et résultats utilisés par l'application
 │
-├── notebooks/                           # Analyses reproductibles, étapes 01 à 08
+├── notebooks/                           # Analyses reproductibles, étapes 01 à 09
 ├── reports/                             # Tableaux de résultats et analyses exportés
 │
 ├── src/
 │   ├── app.py                           # Application Streamlit (démo interactive)
-│   ├── ml_utils.py                      # Prétraitement et évaluation partagés
+│   ├── ml_utils.py                      # Prétraitement, évaluation, NLP (sentiment, tailles) et recommandeur partagés
 │   └── config.toml                      # Thème Streamlit (couleurs, mode clair)
 │
 ├── tests/                               # Tests de l'application, des données et des modèles
@@ -75,7 +76,7 @@ Prediction-des-recommandations--dachats--de-vetements--pour--femmes/
 └── requirements.txt
 ```
 
-> 💡 Après avoir cloné le dépôt, place `reviews.csv` dans `data/raw/` et exécute les notebooks dans l'ordre (**01 → 08**) pour régénérer les données traitées, modèles et rapports. Le Gradient Boosting est inclus dans `04_ensemble_learning.ipynb`. L'application (`src/app.py`) résout automatiquement le chemin vers `models/` à la racine du projet (`Path(__file__).resolve().parents[1]`) : aucune configuration manuelle n'est nécessaire une fois les modèles générés.
+> 💡 Après avoir cloné le dépôt, place `reviews.csv` dans `data/raw/` et exécute les notebooks dans l'ordre (**01 → 09**) pour régénérer les données traitées, modèles et rapports. Le Gradient Boosting est inclus dans `04_ensemble_learning.ipynb`. L'application (`src/app.py`) résout automatiquement le chemin vers `models/` à la racine du projet (`Path(__file__).resolve().parents[1]`) : aucune configuration manuelle n'est nécessaire une fois les modèles générés.
 
 ## 📊 Dataset
 
@@ -187,9 +188,46 @@ Suite aux retours d'évaluation, trois méthodes d'**Ensemble Learning** ont ét
 
 Le modèle déployé pour la **Prédiction en Direct** reste **Linear SVC** (`models/best_model.pkl`). La page **🌲 Ensemble Learning** de l'application permet d'explorer ces résultats de façon interactive : choix du modèle, seuil de décision, matrices de confusion, courbes ROC et avis mal classés.
 
+## 🧠 Traitement NLP des avis et recommandation hybride
+
+Notebook : `09_nlp_sentiment_and_hybrid_recommender.ipynb` (code partagé dans `src/ml_utils.py`).
+
+### Analyse de sentiment combinée aux attributs tabulaires
+
+- **Attributs de taille** : le dataset ne contient pas de colonne « taille ». Elle est extraite du texte des avis par expressions régulières : taille de la cliente en cm (19,2 % des avis), taille portée XS à XXL ou numérique (≈ 20 % des avis), signaux « tombe petit », « tombe grand » et « true to size ». Les valeurs absentes sont imputées avec un indicateur de manquant.
+- **Score de sentiment** : TF-IDF 1-3 grammes + régression logistique entraînée sur le texte seul (polarité : `Rating >= 4`). Dans le pipeline, il est calculé **hors-pli** (`cross_val_predict`) pour éviter toute fuite de données.
+- **Pipeline hermétique** : imputation, standardisation, one-hot, extraction de taille et sentiment sont réajustés sur le train de chaque pli (un seul `Pipeline` passé à `cross_validate`, validation croisée stratifiée à 6 plis).
+
+| Variante (régression logistique) | CV F1 macro | F1 macro (test) | ROC-AUC |
+|---|---|---|---|
+| A. Tabulaire seul | 0.8959 | 0.8859 | 0.9716 |
+| B. + tailles extraites | 0.8968 | 0.8872 | 0.9731 |
+| C. + sentiment (TF-IDF 1-3 grammes) | 0.9072 | 0.8993 | 0.9793 |
+| **D. Hybride complet** | 0.9067 | **0.9019** | **0.9796** |
+| E. Référence : TF-IDF direct | 0.9066 | 0.8943 | 0.9774 |
+| A'. Tabulaire seul, sans `Rating` | 0.4521 | 0.4522 | 0.5503 |
+| **D'. Hybride complet, sans `Rating`** | **0.8389** | **0.8409** | **0.9497** |
+| E'. TF-IDF direct, sans `Rating` | 0.7860 | 0.7895 | 0.9366 |
+
+- **Avec la note**, le sentiment améliore le tabulaire seul (+0,011 de F1 macro en validation croisée) mais l'hybride complet et le TF-IDF direct sont à égalité (0,9067 contre 0,9066) : la note porte l'essentiel du signal.
+- **Sans la note**, l'apport du sentiment est net : +0,053 de F1 macro en validation croisée (0,8389 contre 0,7860).
+- Les métadonnées seules, sans `Rating`, ne valent pas mieux que le hasard (F1 macro 0,45).
+
+### Recommandation hybride avec score calibré
+
+La cliente saisit son profil morphologique (âge, taille en cm, taille habituelle, silhouette, style). Deux composantes sont fusionnées :
+1. **Probabilité calibrée de recommandation** : estimée à partir des avis de clientes de profil proche (noyaux gaussiens sur l'âge, la taille en cm et la taille portée, lissage bayésien, note moyenne, sentiment, « tombe petit / grand »), puis `CalibratedClassifierCV` avec plis groupés par produit. Les exemples d'apprentissage sont construits en *leave-one-out* sur les avis d'un même produit.
+2. **Similarité TF-IDF** entre les mots-clés morphologiques et de style de la cliente et le profil textuel de chaque article (centroïde de ses avis).
+
+Score de classement = α · probabilité calibrée + (1 − α) · similarité (α réglable dans l'application).
+
+Évaluation sur des **produits jamais vus** : ECE ≈ 0,011 (score bien calibré) et Brier 0,1436 contre 0,1454 pour la constante, mais ROC-AUC ≈ 0,58 seulement. Le score est donc fiable comme probabilité, mais discrimine peu entre articles, car 82 % des clientes recommandent n'importe quel article : l'intervalle et le nombre d'avis doivent être lus avec la probabilité.
+
+Sorties : `models/nlp_hybrid_pipeline.pkl`, `models/hybrid_reco.pkl`, `reports/nlp_hybrid_results.csv`, `reports/nlp_hybrid_calibration.csv`, `reports/reco_metrics.csv`, `reports/reco_calibration.csv` et `docs/figures/nlp_hybrid_ablation.png`.
+
 ## 🖥️ Application Streamlit
 
-Fichier : `src/app.py`. Interface interactive avec **9 pages** :
+Fichier : `src/app.py`. Interface interactive avec **10 pages** :
 
 | Onglet | Contenu |
 |---|---|
@@ -202,6 +240,7 @@ Fichier : `src/app.py`. Interface interactive avec **9 pages** :
 | 🌲 Ensemble Learning | Comparaison d'AdaBoost, XGBoost et Soft Voting : métriques par classe, matrice de confusion et courbes ROC interactives (choix du modèle et du seuil), analyse des erreurs par note, département et longueur d'avis, importance des variables |
 | ℹ️ À propos | Stack technique et disclaimer académique |
 | 🔍 Analyse des erreurs | Matrice de confusion et interprétation des erreurs du Linear SVC |
+| 👗 Recommandation Hybride | Profil morphologique (âge, taille, silhouette, style) → suggestions d'articles avec probabilité calibrée et intervalle ; analyse de sentiment et de taille d'un avis ; ablation NLP ; courbe de fiabilité |
 
 <!-- Ajouter ici des captures d'écran de l'application, par exemple :
 ![Prédiction en direct](docs/screenshots/prediction.png)
@@ -250,7 +289,8 @@ Pour régénérer entièrement le projet à partir des données brutes :
 | 6. Comparaisons approfondies | `06_modeling_cv_kernels.ipynb` | données traitées + modèles | `reports/model_results.csv`, `reports/ablation.csv`, `reports/calibration.csv` |
 | 7. Tests statistiques | `07_additional_statistical_tests.ipynb` | données traitées | `reports/stat_tests.csv` |
 | 8. Représentations textuelles | `08_text_representations.ipynb` | données traitées | `reports/text_representations.csv` |
-| 9. Démo | `src/app.py` | `models/*.pkl`, `models/*.csv` et `reports/*.csv` | interface Streamlit |
+| 9. NLP et recommandation | `09_nlp_sentiment_and_hybrid_recommender.ipynb` | données traitées | `models/nlp_hybrid_pipeline.pkl`, `models/hybrid_reco.pkl`, `reports/nlp_hybrid_*.csv`, `reports/reco_*.csv` |
+| 10. Démo | `src/app.py` | `models/*.pkl`, `models/*.csv` et `reports/*.csv` | interface Streamlit |
 
 Un `random_state=42` est fixé sur les modèles à composante aléatoire (Decision Tree, Random Forest, Linear SVC, AdaBoost, XGBoost) et le split train/test est stratifié (`stratify=y`) pour garantir la reproductibilité des résultats.
 
@@ -262,6 +302,7 @@ Un `random_state=42` est fixé sur les modèles à composante aléatoire (Decisi
 - **Écarts entre modèles proches de l'incertitude d'échantillonnage** (≈ ±0,35 point d'accuracy sur 4 693 avis) : un seul découpage train/test, pas de test de significativité apparié.
 - **Fuite mineure dans la validation croisée** : le préprocesseur est ajusté sur tout le jeu d'entraînement avant `GridSearchCV` (les plis de validation influencent légèrement les idf et les moyennes). Le jeu de test n'est pas concerné.
 - **Analyse du seuil de décision réalisée sur le jeu de test** : exploratoire, à ne pas lire comme une performance finale.
+- **Recommandeur hybride** : le score est bien calibré (ECE ≈ 0,011) mais discrimine peu entre articles (ROC-AUC ≈ 0,58, produits jamais vus). Les tailles sont extraites du texte par expressions régulières (≈ 19 % des avis donnent la taille en cm) et l'interface ne compare que des clientes de profil proche déjà présentes dans les avis.
 - Application développée à des fins académiques ; les prédictions sont indicatives.
 
 ## 🚀 Pistes d'amélioration
@@ -273,7 +314,7 @@ Un `random_state=42` est fixé sur les modèles à composante aléatoire (Decisi
 - Tester la pondération des classes (`class_weight`, `scale_pos_weight`) et l'enrichissement du TF-IDF (n-grammes 1–2, `min_df`, pondération sous-linéaire, LSA / `TruncatedSVD`)
 - Ajouter `GradientBoostingClassifier` (scikit-learn) et le comparer à AdaBoost et XGBoost
 - Compléter l'onglet *Statistiques du Dataset* (statistiques descriptives, valeurs manquantes, histogrammes/KDE, fréquences catégorielles, matrice de corrélation, filtre interactif)
-- Afficher un score de confiance calibré (`CalibratedClassifierCV`) et les termes les plus influents dans l'application
+- Étendre le score de confiance calibré à la page « Prédiction en Direct » (Linear SVC) ; améliorer l'extraction de la taille (modèle de reconnaissance d'entités plutôt que regex)
 - Déployer l'application en ligne (Streamlit Community Cloud)
 
 ## 👤 Équipe et contexte
