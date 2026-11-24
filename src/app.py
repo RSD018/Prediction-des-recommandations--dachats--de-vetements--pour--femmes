@@ -1095,6 +1095,7 @@ PAGES = [
     "🌲 Ensemble Learning",
     "ℹ️ À propos",
     "🔍 Analyse des erreurs",
+    "👗 Recommandation Hybride",
 ]
 
 
@@ -2333,3 +2334,151 @@ if page == PAGES[8]:
 
 
 # ==============================================================================
+# ==============================================================================
+# PAGE : RECOMMANDATION HYBRIDE (profil morphologique + NLP, score calibré)
+# Données : models/hybrid_reco.pkl, models/nlp_hybrid_pipeline.pkl, reports/nlp_hybrid_results.csv (notebook 09).
+# Noms préfixés reco_ pour ne jamais entrer en collision avec les autres pages.
+# ==============================================================================
+from ml_utils import (MORPHO_KEYWORDS, STYLE_KEYWORDS, SIZE_LABELS, NLP_PIPE_PATH, best_snippets, extract_size_features,
+                      keywords_from_profile, load_clean_data, load_reco_artifacts, recommend, sentiment_label)
+
+RECO_DEPT_FR = {"Dresses": "Robes", "Tops": "Hauts", "Bottoms": "Bas", "Jackets": "Vestes", "Intimate": "Lingerie", "Trend": "Tendance"}
+
+
+@st.cache_resource
+def reco_artifacts():
+    return load_reco_artifacts()
+
+
+@st.cache_resource
+def reco_nlp_scorer():
+    if not NLP_PIPE_PATH.exists():
+        return None
+    return joblib.load(NLP_PIPE_PATH).named_steps["pre"].named_transformers_["sentiment"]
+
+
+@st.cache_data
+def reco_clean():
+    return load_clean_data()
+
+
+def reco_tab_suggestions(art):
+    df = reco_clean()
+    st.markdown('<div class="section-title">👩 Profil morphologique de la cliente</div>', unsafe_allow_html=True)
+    with st.form("reco_form"):
+        c1, c2, c3 = st.columns(3)
+        age = c1.number_input("Âge", 18, 90, 34)
+        know_h = c2.checkbox("Je connais ma taille (cm)", value=True)
+        height = c2.number_input("Taille (cm)", 140, 200, 165, disabled=not know_h)
+        size = c3.selectbox("Taille de vêtement habituelle", ["Je ne sais pas"] + SIZE_LABELS[1:6], index=3)
+        silhouette = st.multiselect("Silhouette et particularités", list(MORPHO_KEYWORDS), default=["Silhouette poire (hanches marquées)"])
+        style = st.multiselect("Envies de style", list(STYLE_KEYWORDS), default=["Coupe ample / fluide"])
+        free = st.text_input("Précisions libres (en anglais, optionnel)", placeholder="ex. wedding guest, work dress, soft knit")
+        c4, c5 = st.columns(2)
+        depts = c4.multiselect("Départements", sorted(art["catalog"]["Departement"].unique()), format_func=lambda d: RECO_DEPT_FR.get(d, d))
+        classes = c5.multiselect("Catégories", sorted(art["catalog"]["Classe"].unique()))
+        c6, c7, c8 = st.columns(3)
+        alpha = c6.slider("Poids de la probabilité vs. le style", 0.0, 1.0, 0.7, 0.05,
+                          help="1 = classement par probabilité calibrée seule ; 0 = par ressemblance avec vos mots-clés seule.")
+        min_reviews = c7.slider("Nombre minimal d'avis par article", 1, 50, 10)
+        top_n = c8.slider("Nombre de suggestions", 3, 12, 6)
+        go = st.form_submit_button("✨ Obtenir mes suggestions", width="stretch")
+
+    if go:
+        size_ord = np.nan if size == "Je ne sais pas" else float(SIZE_LABELS.index(size))
+        profile = {"age": float(age), "height_cm": float(height) if know_h else np.nan, "size_ord": size_ord}
+        st.session_state["reco_last"] = (profile, keywords_from_profile(silhouette, style, free), alpha, top_n, min_reviews, depts, classes)
+    if "reco_last" not in st.session_state:
+        st.info("Renseignez votre profil puis cliquez sur « Obtenir mes suggestions ».")
+        return
+    profile, query, alpha, top_n, min_reviews, depts, classes = st.session_state["reco_last"]
+    res = recommend(art, profile, query, alpha=alpha, top_n=top_n, min_reviews=min_reviews, departments=depts or None, classes=classes or None)
+    if res.empty:
+        st.warning("Aucun article ne correspond : baissez le nombre minimal d'avis ou élargissez les catégories.")
+        return
+
+    st.markdown('<div class="section-title">🛍️ Suggestions pour vous</div>', unsafe_allow_html=True)
+    st.caption(f"Mots-clés de style utilisés : « {query.strip() or '—'} »")
+    for rank, (pid, r) in enumerate(res.iterrows(), start=1):
+        with st.container(border=True):
+            a, b = st.columns([1.2, 2])
+            with a:
+                st.markdown(f"**#{rank} · Article {pid}**  \n{RECO_DEPT_FR.get(r['Departement'], r['Departement'])} › {r['Classe']}")
+                st.metric("Probabilité calibrée de recommandation", f"{r['P_calibree']:.0%}")
+                st.progress(float(r["P_calibree"]))
+                st.caption(f"Intervalle indicatif à 90 % : {r['P_bas']:.0%} – {r['P_haut']:.0%}")
+            with b:
+                st.markdown(f"📏 {r['conseil_taille']}")
+                st.caption(f"{int(r['n_avis'])} avis · taux de recommandation brut {r['taux_reco']:.0%} · note moyenne {r['note_moyenne']:.2f}/5 · "
+                           f"âge médian des clientes {r['age_median']:.0f} ans")
+                if query.strip():
+                    st.caption(f"Ressemblance avec votre style : {r['sim_texte']:.0%} · score hybride {r['score_hybride']:.2f}")
+                with st.expander("Ce que disent des clientes proches de votre profil"):
+                    for s_ in best_snippets(art, df, pid, query) or ["Pas d'avis positif assez détaillé."]:
+                        st.markdown(f"> {s_}")
+    st.markdown(
+        '<div class="disclaimer">⚠️ La probabilité est <b>calibrée</b> (elle correspond à une fréquence observée) mais son pouvoir de '
+        'discrimination entre articles est modeste : environ 82 % des clientes recommandent n\'importe quel article. '
+        'Fiez-vous surtout à l\'intervalle et au nombre d\'avis. Outil académique, résultats indicatifs.</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def reco_tab_nlp():
+    scorer = reco_nlp_scorer()
+    st.markdown('<div class="section-title">📝 Analyse de sentiment d\'un avis (TF-IDF 1-3 grammes)</div>', unsafe_allow_html=True)
+    if scorer is None:
+        st.error("`models/nlp_hybrid_pipeline.pkl` introuvable : exécutez le notebook 09.")
+        return
+    txt = st.text_area("Avis (en anglais)", "Beautiful dress but it runs small. I'm 5'4\" and usually a size M, had to size up. The fabric is lovely.", height=110)
+    if txt.strip():
+        p = float(scorer.score_texts([txt])[0])
+        feats = extract_size_features(txt)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Sentiment", sentiment_label(np.log(p / (1 - p))))
+        c2.metric("P(avis positif)", f"{p:.0%}")
+        c3.metric("Taille détectée (cm)", "—" if np.isnan(feats["height_cm"]) else f"{feats['height_cm']:.0f}")
+        c4.metric("Taille portée", "—" if np.isnan(feats["size_ord"]) else SIZE_LABELS[int(feats["size_ord"])])
+        flags = [n for n, k in (("tombe petit", "runs_small"), ("tombe grand", "runs_large"), ("taille normale", "true_to_size")) if feats[k] == 1]
+        st.caption("Signaux d'ajustement détectés : " + (", ".join(flags) if flags else "aucun"))
+    pos, neg = scorer.top_terms(12)
+    c1, c2 = st.columns(2)
+    c1.markdown("**Termes les plus positifs**  \n" + " · ".join(pos))
+    c2.markdown("**Termes les plus négatifs**  \n" + " · ".join(neg))
+    st.markdown('<div class="section-title">🧪 Apport du texte : ablation (jeu de test, pipeline hermétique)</div>', unsafe_allow_html=True)
+    p_res = PROJECT_ROOT / "reports" / "nlp_hybrid_results.csv"
+    if p_res.exists():
+        st.dataframe(pd.read_csv(p_res).drop(columns=["Temps CV (s)"], errors="ignore").round(4), hide_index=True, width="stretch")
+        st.caption("Le sentiment est calculé hors-pli (cross_val_predict) dans le Pipeline : aucune fuite vers les plis de validation ni vers le test.")
+    else:
+        st.info("Exécutez le notebook 09 pour générer ce tableau.")
+
+
+def reco_tab_reliability(art):
+    st.markdown('<div class="section-title">🎯 Fiabilité du score (produits jamais vus)</div>', unsafe_allow_html=True)
+    st.dataframe(art["metrics"].round(4), hide_index=True, width="stretch")
+    cal = art["calibration"]
+    cal = cal[cal["n"] >= 20]
+    diag = alt.Chart(pd.DataFrame({"x": [0, 1], "y": [0, 1]})).mark_line(strokeDash=[5, 4], color="#8A6B78").encode(x="x", y="y")
+    pts = alt.Chart(cal).mark_circle(color="#D81B60").encode(
+        x=alt.X("proba_moyenne:Q", title="Probabilité prédite", scale=alt.Scale(domain=[0.5, 1])),
+        y=alt.Y("taux_observé:Q", title="Fréquence observée", scale=alt.Scale(domain=[0.5, 1])),
+        size=alt.Size("n:Q", legend=None), tooltip=["bin", "n", "proba_moyenne", "taux_observé"])
+    st.altair_chart((diag + pts).properties(height=320, title="Courbe de fiabilité (diagonale = calibration parfaite)"), width="stretch")
+    st.caption(f"Calibration retenue : **{art['method']}** (CalibratedClassifierCV, plis groupés par produit) · "
+               f"{art['n_reviews']} avis · {art['n_products']} articles.")
+
+
+if page == PAGES[9]:
+    st.markdown('<div class="section-title">👗 Système de recommandation hybride</div>', unsafe_allow_html=True)
+    reco_art = reco_artifacts()
+    if reco_art is None:
+        st.error("`models/hybrid_reco.pkl` introuvable : exécutez le notebook 09 (`09_nlp_sentiment_and_hybrid_recommender.ipynb`).")
+    else:
+        reco_t1, reco_t2, reco_t3 = st.tabs(["🛍️ Mes suggestions", "📝 Analyse NLP des avis", "🎯 Fiabilité du score"])
+        with reco_t1:
+            reco_tab_suggestions(reco_art)
+        with reco_t2:
+            reco_tab_nlp()
+        with reco_t3:
+            reco_tab_reliability(reco_art)
